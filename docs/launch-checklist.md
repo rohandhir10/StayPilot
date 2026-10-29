@@ -8,7 +8,7 @@
 - [ ] Provision Clerk, create the initial owner, set `OWNER_CLERK_USER_ID`, and confirm an uninvited account gets `403` while the owner gets access.
 - [ ] Provision Railway PostgreSQL; set `DATABASE_SSL=true` and keep certificate validation enabled. Apply migrations via Railway pre-deploy command.
 - [ ] Set exact Vercel production origin in Railway `WEB_ORIGINS`; verify expected Vercel preview behavior explicitly.
-- [ ] Configure the correct trusted Railway proxy hop count; test that `request.ip` reflects real client addresses, not arbitrary `X-Forwarded-For` content.
+- [ ] Set `TRUSTED_PROXY_CIDRS` to the exact, provider-confirmed ingress proxy IPs/CIDRs; do not use universal ranges. Test that `request.ip` reflects real client addresses and that arbitrary `X-Forwarded-For` values cannot bypass rate limits.
 - [ ] Test backup/restore for PostgreSQL and decide retention/deletion for leads, messages, audit history and backups.
 - [ ] Enable a verified Meta test webhook only after the app's account permissions are approved; confirm invalid signatures never write messages.
 - [ ] Configure Cloudflare Turnstile for the public inquiry form and test invalid/expired CAPTCHA, consent rejection, rate limiting and success.
