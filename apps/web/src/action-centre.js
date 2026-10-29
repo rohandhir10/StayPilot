@@ -138,6 +138,7 @@ function renderTask(task, { isPreview, canWrite }) {
 export function renderActionCentre(container, { leads = [], api, workspaceSession = null, isPreview = false, toast = () => {}, onOpenLead = () => {} }) {
   const role = workspaceSession?.workspace?.role || 'viewer';
   const canWrite = isPreview || ['owner', 'admin', 'sales'].includes(role);
+  const canManageConnections = !isPreview && ['owner', 'admin'].includes(role);
   let tasks = [];
   let channelStates = [
     { channel_key: 'whatsapp', display_name: 'WhatsApp Business', status: 'not_connected' },
@@ -194,13 +195,24 @@ export function renderActionCentre(container, { leads = [], api, workspaceSessio
       const status = channel.status || 'not_connected';
       const live = status === 'inbound_active' || status === 'connected';
       const label = live ? 'Connected' : status === 'error' ? 'Needs attention' : status === 'pending' ? 'Setup in progress' : 'Not connected';
-      const note = status === 'error' ? (channel.last_error_code || 'Check provider configuration') :
+      const note = channel.account_label ? 'Account: ' + channel.account_label :
+        status === 'error' ? (channel.last_error_code || 'Check provider configuration') :
+        channel.last_error_code ? 'Last warning: ' + channel.last_error_code :
         channel.last_synced_at ? 'Last sync ' + dateLabel(channel.last_synced_at) :
         channel.last_webhook_at ? 'Last inbound event ' + dateLabel(channel.last_webhook_at) : info.note;
+      let action = '';
+      if (!isPreview && (channel.channel_key === 'email_gmail' || channel.channel_key === 'email_outlook')) {
+        if (live && canWrite) {
+          action = '<button type="button" class="ac-source-action" data-ac-sync-channel="' + escapeHtml(channel.channel_key) + '">Sync now</button>';
+        } else if (canManageConnections) {
+          const provider = channel.channel_key === 'email_gmail' ? 'google' : 'microsoft';
+          action = '<button type="button" class="ac-source-action" data-ac-connect-provider="' + provider + '">' + (status === 'error' ? 'Reconnect' : 'Connect') + '</button>';
+        }
+      }
       return '<article class="ac-source-card"><div class="ac-source-name"><span class="ac-source-icon ' + escapeHtml(channel.channel_key) + '">' +
         escapeHtml(channel.channel_key === 'whatsapp' ? 'W' : channel.channel_key === 'email_gmail' ? 'G' : 'O') +
-        '</span><div><b>' + escapeHtml(info.label) + '</b><small>' + escapeHtml(note) + '</small></div></div><span class="ac-connection-state ' +
-        (live ? 'connected' : status === 'error' ? 'error' : '') + '">' + escapeHtml(label) + '</span></article>';
+        '</span><div><b>' + escapeHtml(info.label) + '</b><small>' + escapeHtml(note) + '</small></div></div><div class="ac-source-actions"><span class="ac-connection-state ' +
+        (live ? 'connected' : status === 'error' ? 'error' : '') + '">' + escapeHtml(label) + '</span>' + action + '</div></article>';
     }).join('');
   };
 
@@ -288,7 +300,44 @@ export function renderActionCentre(container, { leads = [], api, workspaceSessio
     if (!(target instanceof Element)) return;
     const actionButton = target.closest('[data-ac-action]');
     const leadButton = target.closest('[data-ac-lead]');
+    const connectButton = target.closest('[data-ac-connect-provider]');
+    const syncButton = target.closest('[data-ac-sync-channel]');
     if (leadButton) { onOpenLead(leadButton.dataset.acLead); return; }
+    if (connectButton) {
+      const provider = connectButton.dataset.acConnectProvider;
+      if (!['google','microsoft'].includes(provider)) return;
+      const popup = window.open('about:blank', 'staypilot-mail-oauth', 'popup,width=560,height=720');
+      if (!popup) { toast('Allow pop-ups for StayPilot to connect this mailbox.', true); return; }
+      connectButton.disabled = true;
+      try {
+        const result = await api('/channels/oauth/' + provider + '/start', { method: 'POST', body: JSON.stringify({}) });
+        if (!result.authorization_url) throw new Error('The provider did not return an authorization URL.');
+        popup.location.href = result.authorization_url;
+        const started = Date.now();
+        const monitor = window.setInterval(() => {
+          if (popup.closed) { window.clearInterval(monitor); void loadTasks(); }
+          else if (Date.now() - started > 10 * 60 * 1000) { window.clearInterval(monitor); }
+        }, 800);
+      } catch (error) {
+        popup.close();
+        toast('Could not start mailbox connection: ' + error.message, true);
+      } finally { connectButton.disabled = false; }
+      return;
+    }
+    if (syncButton) {
+      const channelKey = syncButton.dataset.acSyncChannel;
+      if (!['email_gmail','email_outlook'].includes(channelKey)) return;
+      syncButton.disabled = true; syncButton.textContent = 'Syncing…';
+      try {
+        const result = await api('/channels/mail/sync', { method: 'POST', body: JSON.stringify({ channel_key: channelKey }) });
+        toast((result.imported_count || 0) + ' new message(s) imported' + (result.more_pages_available ? '. More messages remain; sync again to continue.' : '. Mailbox sync complete.'));
+        await loadTasks({ scan: true });
+      } catch (error) {
+        toast('Mailbox sync failed: ' + error.message, true);
+        syncButton.disabled = false; syncButton.textContent = 'Sync now';
+      }
+      return;
+    }
     if (!actionButton) return;
     const id = actionButton.dataset.acId;
     const status = actionButton.dataset.acAction;
