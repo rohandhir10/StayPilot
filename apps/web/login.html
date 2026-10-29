@@ -15,7 +15,7 @@
     .mark{width:42px;height:42px;display:grid;place-items:center;background:linear-gradient(145deg,#e6c99a,#b28b52);border-radius:12px;color:#142238;font:800 22px Manrope}
     .brand b{font:800 20px Manrope;letter-spacing:-.8px}.brand small{display:block;font-size:9px;letter-spacing:1.4px;color:#8c99a9;margin-top:3px}
     h1{font:700 25px Manrope;margin:0 0 8px;letter-spacing:-.6px}.intro{margin:0 0 24px;color:#7d8998;font-size:12px;line-height:1.7}
-    #clerk-sign-in{min-height:180px}.error{display:none;background:#fff1f0;border:1px solid #f1d0cb;color:#943e35;border-radius:8px;padding:12px;font-size:12px;line-height:1.6;margin:0 0 12px}
+    #google-sign-in{width:100%;min-height:46px;border:1px solid #d7dfe8;border-radius:9px;background:#fff;color:#1f3047;font:650 13px Inter,system-ui,sans-serif;cursor:pointer}#google-sign-in:disabled{opacity:.55;cursor:not-allowed}#google-sign-in[hidden]{display:none}.error{display:none;background:#fff1f0;border:1px solid #f1d0cb;color:#943e35;border-radius:8px;padding:12px;font-size:12px;line-height:1.6;margin:0 0 12px}
     .foot{font-size:10px;color:#8d99a8;line-height:1.7;margin-top:18px}.back{display:inline-block;margin-top:18px;color:#5d718c;font-size:11px;text-decoration:none}
   </style>
 </head>
@@ -25,8 +25,8 @@
     <h1>Welcome back</h1>
     <p class="intro">Sign in to access your team’s hotel sales workspace. New users need a verified invitation and workspace access.</p>
     <p class="error" id="auth-error" role="alert"></p>
-    <div id="clerk-sign-in" aria-label="Sign in"></div>
-    <p class="foot">Your account is authenticated by Clerk. StayPilot separately checks workspace membership and role permissions before showing CRM data.</p>
+    <button id="google-sign-in" type="button">Continue with Google</button>
+    <p class="foot">Google authenticates your account. StayPilot separately checks workspace membership and role permissions before showing CRM data.</p>
     <a class="back" href="/">← Back to StayPilot</a>
   </main>
   <script type="module" src="/src/login.js"></script>
