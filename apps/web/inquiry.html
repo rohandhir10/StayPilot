@@ -24,7 +24,8 @@
 <script>
 (function(){
 "use strict";
-const configuredApiBase=(window.STAYPILOT_API_BASE_URL||"").replace(/\/$/,"");
+const apiBaseCandidate=(window.STAYPILOT_API_BASE_URL||"").trim().replace(/\/$/,"");
+const configuredApiBase=/^https?:\/\/[^/\\s]+(?:\/api)?$/i.test(apiBaseCandidate)?apiBaseCandidate:"";
 const API_BASE=configuredApiBase?(configuredApiBase.endsWith("/api")?configuredApiBase:configuredApiBase+"/api"):"/api";
 const form=document.getElementById("form"),btn=document.getElementById("submit"),msg=document.getElementById("message");
 const captchaToken={value:""};let siteKey="",formStartedAt=Date.now(),widgetId=null,ready=false;
