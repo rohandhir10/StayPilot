@@ -38,6 +38,10 @@ An authorized owner/admin uses `POST /api/integrations/keys` or the current UI c
 
 Partner submissions use `POST /api/partner/inquiries`, the header `Authorization: Bearer sp_live_…`, and a unique `Idempotency-Key` header. Scope is currently only `inquiries:create`.
 
+## Action Centre task suggestions
+
+The Action Centre can generate idempotent suggested tasks from CRM fields and the latest inbound messages already stored in `sp_channel_messages`. The first conversation parser uses conservative phrase rules and attaches an excerpt; it must not be marketed as a fully contextual AI agent. Staff should verify every suggestion and mark completion only after the outcome is confirmed. The refresh endpoint requires an authenticated workspace writer and records an audit event. Testing preview uses synthetic conversations and never reads a live mailbox.
+
 ## Gmail, Outlook and other channels
 
 Gmail/Outlook OAuth mailbox sync, outbound email, WhatsApp outbound, phone-system ingest, OTA reservation/inquiry APIs and channel-manager integrations are **not connected in this release**. The channel dashboard reports status, but `/api/integrations/sync` returns `501` rather than pretending mail was synced. Each connector requires its own OAuth/token lifecycle, least-privilege scopes, provider approval, retry/backoff, paging/checkpoint strategy and tests before enabling it.
