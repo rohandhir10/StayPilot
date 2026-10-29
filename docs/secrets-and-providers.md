@@ -2,17 +2,16 @@
 
 Real credentials must be created or authorized in the corresponding provider account. The backend cannot invent valid external account keys. No real provider secrets are present in this bundle.
 
-## Clerk (authentication)
+## Firebase Authentication (Google sign-in)
 
-1. Create a Clerk application owned by the intended StayPilot operator.
-2. Copy the publishable key to Vercel as `VITE_CLERK_PUBLISHABLE_KEY` and the matching secret key to Railway as `CLERK_SECRET_KEY`.
-3. Add the same publishable key to Railway as `CLERK_PUBLISHABLE_KEY`.
-4. Configure allowed application origins and sign-in behavior in Clerk; use production keys for production.
-5. Create the intended first owner account and set the user's real `user_…` ID as Railway's `OWNER_CLERK_USER_ID` before first API sign-in.
-6. Other users require both an authenticated Clerk session and a verified email matching an unexpired StayPilot invitation. The invitation endpoint currently creates a database access grant but does not send an email or create a Clerk invitation automatically.
+1. Create or select a Firebase project and register a Web App.
+2. Enable **Authentication → Sign-in method → Google** and add the intended Vercel hostnames under **Authentication → Settings → Authorized domains**.
+3. Put the public Web App settings (`VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_APP_ID`) in Vercel for the intended environments.
+4. Create a Firebase Admin SDK service-account JSON key from the Firebase/Google Cloud project. Store the entire JSON document only in the Railway API's encrypted `FIREBASE_SERVICE_ACCOUNT_JSON` variable, and set `FIREBASE_PROJECT_ID` to the same project ID. Never commit the JSON key or put it in Vercel.
+5. Sign in once with the intended Google account, copy that account's Firebase Authentication UID, and set it as `OWNER_FIREBASE_UID` in Railway before the first authenticated CRM request.
+6. Other users need a verified email matching an unexpired StayPilot invitation. The invitation endpoint creates a database access grant but does not send email itself.
 
-The API accepts Clerk-validated session tokens; it does not accept a client-supplied user ID or role as proof of identity. It uses the Clerk Backend API only when a user without an existing workspace membership must have their verified email checked.
-
+The API verifies the bearer ID token with Firebase Admin including revocation checking, then uses its UID as the identity key. The API does not trust a client-supplied email, UID, or role as proof of identity. Workspace membership and role checks still run for every protected route.
 ## Meta (WhatsApp, Facebook, Instagram inbound events)
 
 1. Create/configure a Meta app for the correct business/property accounts and enable only the permissions applicable to those accounts.
