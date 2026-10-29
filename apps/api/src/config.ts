@@ -10,6 +10,7 @@ const booleanValue = z.preprocess((value) => {
 const integerFromEnv = (fallback: number, min: number, max: number) =>
   z.preprocess((value) => value === undefined || value === '' ? fallback : Number(value),
     z.number().int().min(min).max(max));
+const optionalString = z.preprocess(value => value === '' ? undefined : value, z.string().min(1).optional());
 
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -23,6 +24,12 @@ const schema = z.object({
   CLERK_SECRET_KEY: z.string().min(1),
   OWNER_CLERK_USER_ID: z.preprocess(value => value === '' ? undefined : value, z.string().min(1).optional()),
   WEB_ORIGINS: z.string().min(1),
+  PUBLIC_API_URL: optionalString,
+  GOOGLE_OAUTH_CLIENT_ID: optionalString,
+  GOOGLE_OAUTH_CLIENT_SECRET: optionalString,
+  MICROSOFT_OAUTH_CLIENT_ID: optionalString,
+  MICROSOFT_OAUTH_CLIENT_SECRET: optionalString,
+  INTEGRATION_TOKEN_ENCRYPTION_KEY: optionalString,
   META_APP_SECRET: z.preprocess(value => value === '' ? undefined : value, z.string().min(1).optional()),
   META_WEBHOOK_VERIFY_TOKEN: z.preprocess(value => value === '' ? undefined : value, z.string().min(24).optional()),
   TURNSTILE_SECRET_KEY: z.preprocess(value => value === '' ? undefined : value, z.string().min(1).optional()),
@@ -37,7 +44,6 @@ const schema = z.object({
 const parsed = schema.safeParse(process.env);
 if (!parsed.success) {
   const issues = parsed.error.issues.map(issue => `${issue.path.join('.')}: ${issue.message}`).join('; ');
-  // Report missing variable names and validation messages only, never values.
   throw new Error(`Invalid StayPilot API configuration: ${issues}`);
 }
 
@@ -65,6 +71,10 @@ if (parsed.data.NODE_ENV === 'production') {
   if (parsed.data.DATABASE_SSL && !parsed.data.DATABASE_SSL_REJECT_UNAUTHORIZED) {
     throw new Error('Production database TLS certificate verification must remain enabled.');
   }
+  if (parsed.data.INTEGRATION_TOKEN_ENCRYPTION_KEY) {
+    const key = Buffer.from(parsed.data.INTEGRATION_TOKEN_ENCRYPTION_KEY, 'base64');
+    if (key.length !== 32) throw new Error('INTEGRATION_TOKEN_ENCRYPTION_KEY must be a base64-encoded 32-byte key.');
+  }
 }
 
 export const env = Object.freeze({
@@ -79,6 +89,12 @@ export const env = Object.freeze({
   clerkSecretKey: parsed.data.CLERK_SECRET_KEY,
   ownerClerkUserId: parsed.data.OWNER_CLERK_USER_ID,
   webOrigins: parsed.data.WEB_ORIGINS.split(',').map(s => s.trim()).filter(Boolean),
+  publicApiUrl: parsed.data.PUBLIC_API_URL?.replace(/\/$/, ''),
+  googleOAuthClientId: parsed.data.GOOGLE_OAUTH_CLIENT_ID,
+  googleOAuthClientSecret: parsed.data.GOOGLE_OAUTH_CLIENT_SECRET,
+  microsoftOAuthClientId: parsed.data.MICROSOFT_OAUTH_CLIENT_ID,
+  microsoftOAuthClientSecret: parsed.data.MICROSOFT_OAUTH_CLIENT_SECRET,
+  integrationTokenEncryptionKey: parsed.data.INTEGRATION_TOKEN_ENCRYPTION_KEY,
   metaAppSecret: parsed.data.META_APP_SECRET,
   metaWebhookVerifyToken: parsed.data.META_WEBHOOK_VERIFY_TOKEN,
   turnstileSecretKey: parsed.data.TURNSTILE_SECRET_KEY,
