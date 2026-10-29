@@ -25,7 +25,7 @@ export async function checkDatabase(): Promise<void> {
 
 export async function checkSchemaReady(): Promise<void> {
   // Keep this list synchronized with required migrations as new versions ship.
-  const required = ['0001_initial.sql', '0002_workspace_integrity.sql', '0003_inbox_pagination_indexes.sql', '0004_import_idempotency.sql'];
+  const required = ['0001_initial.sql', '0002_workspace_integrity.sql', '0003_inbox_pagination_indexes.sql', '0004_import_idempotency.sql', '0005_sales_workflows.sql'];
   const result = await pool.query(
     'SELECT name FROM schema_migrations WHERE name = ANY($1::text[])',
     [required]
