@@ -230,7 +230,7 @@ describe('StayPilot API workflow integration (PostgreSQL)', () => {
       [workspaceId, 'Workflow Test ' + fixture, secret.slice(0,16), sha256(secret), member.user_id]
     );
     partnerKeyId = key.rows[0].id;
-    const payload = { ...leadPayload('partner'), source: 'Other', status: 'Confirmed' };
+    const { estimated_value: _value, source: _source, status: _status, assigned_to: _assignedTo, next_follow_up: _nextFollowUp, ...payload } = leadPayload('partner');
     const headers = { authorization: 'Bearer ' + secret, 'idempotency-key': 'workflow-' + fixture + '-partner-001' };
 
     const first = await app.inject({ method: 'POST', url: '/api/partner/inquiries', headers, payload });
@@ -238,6 +238,24 @@ describe('StayPilot API workflow integration (PostgreSQL)', () => {
     partnerLeadId = first.json().lead_id;
     leadIds.push(partnerLeadId);
     expect(first.json().status).toBe('New inquiry');
+    const stored = await pool.query('SELECT source,status,assigned_to,estimated_value,next_follow_up FROM leads WHERE id=$1', [partnerLeadId]);
+    expect(stored.rows[0]).toMatchObject({ source: 'Partner API', status: 'New inquiry', assigned_to: 'Unassigned', estimated_value: '0.00', next_follow_up: null });
+
+    for (const [field, value] of Object.entries({
+      status: 'Confirmed',
+      source: 'Other',
+      assigned_to: 'CEO',
+      estimated_value: 999999,
+      next_follow_up: '2026-12-01T10:00:00.000Z'
+    })) {
+      const forged = await app.inject({
+        method: 'POST', url: '/api/partner/inquiries',
+        headers: { ...headers, 'idempotency-key': `workflow-${fixture}-forged-${field}` },
+        payload: { ...payload, [field]: value }
+      });
+      expect(forged.statusCode, `partner field ${field}`).toBe(400);
+      expect(forged.json().code).toBe('invalid_inquiry');
+    }
 
     const retry = await app.inject({ method: 'POST', url: '/api/partner/inquiries', headers, payload });
     expect(retry.statusCode).toBe(200);

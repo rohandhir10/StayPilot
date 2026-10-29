@@ -4,7 +4,7 @@ import { env } from '../config.js';
 import { fail, noStore } from '../http.js';
 import { createLeadRecord } from '../domain.js';
 import { hitRateLimit, sha256 } from '../security.js';
-import { leadSchema } from '../validation.js';
+import { partnerLeadSchema } from '../validation.js';
 
 function bearerToken(header: string | undefined): string | null {
   if (!header || header.length > 200) return null;
@@ -34,9 +34,9 @@ export async function registerPartnerRoutes(app: FastifyInstance): Promise<void>
       if (typeof idempotencyKey !== 'string' || idempotencyKey.length < 8 || idempotencyKey.length > 200 || /[\r\n\u0000]/.test(idempotencyKey)) {
         return fail(reply, 400, 'Supply an Idempotency-Key header between 8 and 200 characters.', 'idempotency_key_required');
       }
-      const parsed = leadSchema.safeParse({ ...(request.body as Record<string, unknown>), source: 'Partner API', status: 'New inquiry' });
+      const parsed = partnerLeadSchema.safeParse(request.body);
       if (!parsed.success) return fail(reply, 400, parsed.error.issues[0]?.message || 'Inquiry data is invalid.', 'invalid_inquiry');
-      const leadInput = { ...parsed.data, source: 'Partner API' as const, status: 'New inquiry' as const };
+      const leadInput = parsed.data;
       const requestHash = sha256(JSON.stringify(leadInput));
       const existing = await pool.query<{ request_hash: string; lead_id: string; status: string | null }>(
         `SELECT r.request_hash, r.lead_id, l.status FROM sp_partner_requests r

@@ -68,6 +68,17 @@ export const publicLeadSchema = publicLeadFieldsSchema.extend({
   })
 );
 
+export const partnerLeadSchema = publicLeadFieldsSchema
+  .strict()
+  .superRefine(enforceStayDateOrder)
+  .transform(lead => ({
+    ...lead,
+    source: 'Partner API' as const,
+    status: 'New inquiry' as const,
+    assigned_to: 'Unassigned',
+    estimated_value: 0,
+    next_follow_up: null
+  }));
 export const leadUpdateSchema = z.object({
   id: z.string().uuid(),
   status: z.enum(['New inquiry', 'Contacted', 'Proposal sent', 'Negotiation', 'Confirmed', 'Lost']).optional(),
