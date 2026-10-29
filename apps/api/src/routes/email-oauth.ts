@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
 import { pool, inTransaction } from '../db.js';
 import { requireWorkspaceMember } from '../auth.js';
@@ -139,7 +139,7 @@ async function saveMessage(input: {
       `INSERT INTO sp_channel_messages (workspace_id, conversation_id, channel_key, provider_message_id, direction, sender_name, sender_address, subject, body_text, provider_created_at, delivery_status, metadata)
        VALUES ($1,$2,$3,$4,'inbound',$5,$6,$7,$8,$9::timestamptz,'received','{}'::jsonb)
        ON CONFLICT (workspace_id, channel_key, provider_message_id) WHERE provider_message_id IS NOT NULL DO NOTHING`,
-      [input.workspaceId, conversation.rows[0].id, input.channelKey, input.messageId, input.senderName, input.senderAddress, input.subject, input.body.slice(0, 20000), input.sentAt]
+      [input.workspaceId, conversation.rows[0]!.id, input.channelKey, input.messageId, input.senderName, input.senderAddress, input.subject, input.body.slice(0, 20000), input.sentAt]
     );
   });
 }
@@ -248,6 +248,8 @@ export async function registerEmailOAuthRoutes(app: FastifyInstance): Promise<vo
       if (!claimed) return reply.redirect(`${frontend}/settings/integrations?oauth=expired`);
       const token = await exchangeCode(provider, query.code, decrypt(claimed.code_verifier_ciphertext)) as OAuthTokenResponse;
       if (!token.access_token || !token.refresh_token) throw new Error('provider_refresh_token_missing');
+      const accessTokenValue = token.access_token;
+      const refreshTokenValue = token.refresh_token;
       let profile: any;
       if (provider === 'google') {
         profile = await fetchJson('https://www.googleapis.com/oauth2/v2/userinfo', { headers: { authorization: `Bearer ${token.access_token}` } });
@@ -268,7 +270,7 @@ export async function registerEmailOAuthRoutes(app: FastifyInstance): Promise<vo
              access_token_ciphertext=EXCLUDED.access_token_ciphertext, refresh_token_ciphertext=EXCLUDED.refresh_token_ciphertext,
              token_expires_at=EXCLUDED.token_expires_at, scopes=EXCLUDED.scopes, connected_by_user_id=EXCLUDED.connected_by_user_id,
              sync_cursor=NULL, last_error_code=NULL, updated_at=now()`,
-          [claimed.workspace_id, provider, config.channelKey, email, externalId, encrypt(token.access_token), encrypt(token.refresh_token),
+          [claimed.workspace_id, provider, config.channelKey, email, externalId, encrypt(accessTokenValue), encrypt(refreshTokenValue),
            new Date(Date.now() + Math.max(60, token.expires_in || 3600) * 1000), String(token.scope || '').split(' ').filter(Boolean), claimed.initiated_by_user_id]
         );
         await client.query(
@@ -276,7 +278,7 @@ export async function registerEmailOAuthRoutes(app: FastifyInstance): Promise<vo
            WHERE workspace_id=$3 AND channel_key=$4`,
           [email, externalId, claimed.workspace_id, config.channelKey]
         );
-        await auditEvent(client, { workspaceId: claimed.workspace_id, actor: { user_id: claimed.initiated_by_user_id, email, display_name: email, role: 'owner' }, action: 'integration.email_connected', entityType: 'channel_connection', entityId: config.channelKey, metadata: { provider, account_email: email } });
+        await auditEvent(client, { workspaceId: claimed.workspace_id, actor: { user_id: claimed.initiated_by_user_id, email }, action: 'integration.email_connected', entityType: 'channel_connection', entityId: config.channelKey, metadata: { provider, account_email: email } });
       });
       return reply.redirect(`${frontend}/settings/integrations?oauth=connected&provider=${provider}`);
     } catch (error) {
