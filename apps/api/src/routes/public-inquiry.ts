@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { env } from '../config.js';
-import { fail, normalizeEmail, noStore } from '../http.js';
+import { fail, normalizeEmail, noStore, clientIpForRateLimiting } from '../http.js';
 import { getDefaultWorkspaceId } from '../auth.js';
 import { createLeadRecord } from '../domain.js';
 import { hitRateLimit } from '../security.js';
@@ -51,7 +51,7 @@ export async function registerPublicInquiryRoutes(app: FastifyInstance): Promise
     }
     if (!captchaValid) return fail(reply, 400, 'The security check could not be verified.', 'captcha_invalid');
     try {
-      if (!(await hitRateLimit(`website-ip:${request.ip}`, 30, 3600))) {
+      if (!(await hitRateLimit(`website-ip:${clientIpForRateLimiting(request)}`, 30, 3600))) {
         reply.header('Retry-After', '3600');
         return fail(reply, 429, 'Too many inquiries came from this connection. Please try later.', 'rate_limit_exceeded');
       }

@@ -1,5 +1,7 @@
 import Fastify from 'fastify';
 import { randomUUID } from 'node:crypto';
+import type { FastifyRequest } from 'fastify';
+import { clientIpForRateLimiting } from './http.js';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rawBody from 'fastify-raw-body';
@@ -26,7 +28,7 @@ const app = Fastify({
       censor: '[REDACTED]'
     }
   },
-  trustProxy: env.trustProxyHops,
+  trustProxy: false, // Do not trust hop counts or arbitrary X-Forwarded-* headers.
   bodyLimit: env.webhookBodyLimitBytes,
   requestIdHeader: false,
   genReqId: () => randomUUID()
@@ -50,6 +52,7 @@ await app.register(rateLimit, {
   global: true,
   max: 300,
   timeWindow: '1 minute',
+  keyGenerator: (request: FastifyRequest) => clientIpForRateLimiting(request),
   errorResponseBuilder: () => ({ error: 'Too many requests. Retry shortly.', code: 'rate_limit_exceeded' })
 });
 await app.register(rawBody, {

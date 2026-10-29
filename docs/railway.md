@@ -40,7 +40,7 @@ Use Railway's Variables UI. Do not add real values to GitHub.
 | `CLERK_SECRET_KEY` | yes | Real `sk_live_…` secret key from Clerk; Railway only |
 | `OWNER_CLERK_USER_ID` | yes | Real `user_…` ID of the intended initial owner |
 | `WEB_ORIGINS` | yes | Comma-separated exact HTTPS origins of approved Vercel production/preview deployments; no paths/wildcard/trailing slash |
-| `TRUST_PROXY_HOPS` | yes | Set to the verified Railway proxy hop count so IP-based limits use the client IP correctly; production startup refuses `0`. Do not blindly trust arbitrary forwarded headers |
+| `TRUST_PROXY_HOPS` | not used | Fastify proxy trust is deliberately disabled. Rate limiting reads a syntactically valid `X-Real-IP` only for public-ingress bucketing; Railway's public edge overwrites this header. Private-network callers bypass that edge and must be treated as trusted workloads. |
 | `DATABASE_POOL_MAX` | recommended | `10` to start; size against Railway Postgres connection limits |
 | `RATE_LIMIT_PUBLIC_PER_HOUR` | recommended | `5` per contact email as an abuse-control starting point |
 | `RATE_LIMIT_PARTNER_PER_MINUTE` | recommended | `120` per key as a starting point |

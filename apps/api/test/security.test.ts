@@ -1,8 +1,20 @@
 import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { constantTimeStringEqual, randomPartnerSecret, sha256, verifyMetaSignature } from '../src/crypto.js';
+import { clientIpForRateLimiting } from '../src/http.js';
+import type { FastifyRequest } from 'fastify';
 
 describe('credential and webhook primitives', () => {
+  it('uses a valid Railway X-Real-IP for rate-limit bucketing and rejects malformed values', () => {
+    const request = (ip: string, realIp?: string) => ({
+      ip, headers: realIp === undefined ? {} : { 'x-real-ip': realIp }
+    }) as unknown as FastifyRequest;
+    expect(clientIpForRateLimiting(request('100.64.0.1', '203.0.113.9'))).toBe('203.0.113.9');
+    expect(clientIpForRateLimiting(request('100.64.0.1', 'not-an-ip'))).toBe('100.64.0.1');
+    expect(clientIpForRateLimiting(request('100.64.0.1', '203.0.113.9, 10.0.0.1'))).toBe('100.64.0.1');
+    expect(clientIpForRateLimiting(request('100.64.0.1'))).toBe('100.64.0.1');
+  });
+
   it('generates high-entropy partner credentials with the expected prefix', () => {
     const first = randomPartnerSecret();
     const second = randomPartnerSecret();
