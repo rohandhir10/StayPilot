@@ -1,12 +1,3 @@
 {
-  "rewrites": [
-    {
-      "source": "/login",
-      "destination": "/login.html"
-    },
-    {
-      "source": "/inquiry",
-      "destination": "/inquiry.html"
-    }
-  ]
+  "cleanUrls": true
 }
