@@ -97,7 +97,8 @@ async function buildCandidates(member: WorkspaceMember): Promise<Candidate[]> {
         sourceMessageId: null, evidenceText: 'CRM check-in and check-out dates are blank.', evidenceChannel: 'crm', confidence: 'high'
       });
     }
-    const lastUpdated = lead.updated_at instanceof Date ? lead.updated_at : new Date(lead.updated_at);\n    if (lead.status === 'Proposal sent' && !next && now - lastUpdated.getTime() >= 3 * 86400000) {
+    const lastUpdated = lead.updated_at instanceof Date ? lead.updated_at : new Date(lead.updated_at);
+    if (lead.status === 'Proposal sent' && !next && now - lastUpdated.getTime() >= 3 * 86400000) {
       candidates.push({
         taskKey: `lead:${lead.id}:proposal-stale`, sourceType: 'crm_rule', category: 'follow_up',
         title: 'Check on the outstanding proposal · ' + label,
