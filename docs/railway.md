@@ -68,7 +68,7 @@ The `/api/team/invites` endpoint creates an access grant but **does not send an 
 After deployment:
 
 - `GET /api/health` returns `200`.
-- `GET /api/health/ready` returns `200` only when PostgreSQL is reachable and migration `0001_initial.sql` is registered.
+- `GET /api/health/ready` returns `200` only when PostgreSQL is reachable and all required migrations (`0001_initial.sql` through `0004_import_idempotency.sql`) are registered.
 - `GET /api/session` without a token returns `401`; as a signed-in but uninvited user it returns `403`; as the configured owner it returns the user/workspace/role object.
 - `GET /api/leads/list` for an authorized member returns only the default workspace's inquiries.
 - `POST /api/public/inquiry` without a valid Turnstile response or affirmative consent fails closed.

@@ -2,9 +2,13 @@
 
 ## Before real customer data
 
+- [ ] Confirm GitHub repository visibility is intentional; the current repository setting is public. Do not store real credentials or customer data in source control.
+- [ ] Configure Railway Root Directory as `apps/api`, create/attach private PostgreSQL, set required variables, set pre-deploy migration and `/api/health/ready`, then verify the API is online before testing the frontend.
+- [ ] Locate/connect the actual Vercel frontend source and set its API origin and Clerk public key. The current repository contains backend code only and no connected Vercel project was found.
+
 - [ ] Locate the actual StayPilot frontend repo and integrate the shared API client; never put backend secrets in frontend code.
-- [ ] Generate and commit `apps/api/package-lock.json`, then use `npm ci` in CI/build.
-- [ ] Pass TypeScript typecheck, unit tests and build in GitHub Actions against the real dependency versions.
+- [ ] Generate and commit `apps/api/package-lock.json` (the current CI artifact is temporary), then use `npm ci` in CI/build.
+- [ ] Keep GitHub Actions green for TypeScript typecheck, PostgreSQL integration tests and build; latest verified run passed 9 test files / 50 tests on the audit branch, but this is not a live production smoke test.
 - [ ] Provision Clerk, create the initial owner, set `OWNER_CLERK_USER_ID`, and confirm an uninvited account gets `403` while the owner gets access.
 - [ ] Provision Railway PostgreSQL; set `DATABASE_SSL=true` and keep certificate validation enabled. Apply migrations via Railway pre-deploy command.
 - [ ] Set exact Vercel production origin in Railway `WEB_ORIGINS`; verify expected Vercel preview behavior explicitly.
@@ -43,7 +47,7 @@
 - **No automated data deletion for lead/message content.** Audit events are retained until the owner approves a retention policy. The scheduled cleanup removes only expired rate-limit buckets and old webhook event metadata (processed/ignored after 90 days; failed after 30 days). This is not a compliance certification.
 - **Rate limiting is layered, not a DDoS provider.** The Fastify per-IP limiter is per process/instance; public email/IP and partner-key limits are database-backed. Production proxy trust must be configured correctly, and provider-level/network rate protection may still be needed.
 - **Duplicate detection is advisory.** The import/inquiry overlap logic does not auto-merge or guarantee detection of all duplicates; concurrent submissions can still become separate inquiries.
-- **Dependency/test caveat for this handoff.** npm package installation was unavailable due DNS failure, so dependency installation, a generated lockfile, full typecheck, tests, and production build remain pending. Do not call this production-verified until CI passes.
+- **Verification boundary.** Latest audit-branch CI run passed typecheck, 9 test files / 50 tests against CI PostgreSQL, and build. The package lockfile is only a short-lived CI artifact, not committed. Live API, browser, production Clerk, Turnstile and Meta workflows remain unverified.
 
 ## Retention and privacy
 

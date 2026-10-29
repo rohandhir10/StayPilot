@@ -54,17 +54,21 @@ Follow [the Vercel integration guide](docs/vercel-frontend.md). The API expects 
 
 See [API endpoints](docs/api.md), [architecture](docs/architecture.md), [secrets/provider setup](docs/secrets-and-providers.md), and [launch checklist & limitations](docs/launch-checklist.md).
 
-## Testing / build status
+## Verification status
 
-Run in `apps/api/`:
+Latest API CI run: [run 40904115809](https://github.com/rohandhir10/StayPilot/actions/runs/40904115809) at commit `e2d9cab4` passed PostgreSQL migrations (including two concurrent migration runners), schema readiness checks, TypeScript typecheck, all 9 test files (50 tests), and production build.
 
-```bash
-npm run typecheck
-npm test
-npm run build
-```
+These results verify the backend against CI's isolated PostgreSQL database. They do **not** verify the live browser workflow, a deployed API, real Clerk sessions, live Turnstile verification, or Meta's production webhook. Some provider behavior is mocked in tests.
 
-Dependency installation could not be completed in the build environment because the npm registry DNS lookup failed (`EAI_AGAIN registry.npmjs.org`). Therefore, **the package has not yet been dependency-installed, fully typechecked, test-run, or deployed in this environment**. Run the commands above after the files are in the correct GitHub repository and a package registry is reachable; generate and commit `package-lock.json` before production CI so `npm ci` can be used reproducibly.
+Important remaining release blockers:
+
+- `apps/api/package-lock.json` is generated and uploaded as a short-lived CI artifact, but is not yet committed. Commit and validate it before switching CI/deployment to `npm ci`.
+- The audit fixes are on `audit/fix-hardening`; `main` and the Railway service still point at the original starter commit.
+- The Railway service is offline, has no service domain, and has no application environment variables or PostgreSQL service configured. Its current build failed because the monorepo root directory is not set to `apps/api`.
+- No Vercel project connected to this repository or frontend source was found, so the browser-to-API journey cannot yet be exercised.
+- GitHub currently reports this repository as **public**. Verify that this is intentional before proceeding; do not commit production credentials or customer data.
+
+The API is **not production-ready** until these deployment and integration blockers are resolved and the post-deployment smoke tests in [the Railway guide](docs/railway.md) pass.
 
 ## Publish to GitHub
 
