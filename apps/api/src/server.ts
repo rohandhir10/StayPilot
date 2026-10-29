@@ -26,7 +26,7 @@ const app = Fastify({
       censor: '[REDACTED]'
     }
   },
-  trustProxy: env.trustProxyHops,
+  trustProxy: env.trustedProxyCidrs.length ? env.trustedProxyCidrs : false,
   bodyLimit: env.webhookBodyLimitBytes,
   requestIdHeader: false,
   genReqId: () => randomUUID()
