@@ -155,9 +155,9 @@ export async function upsertExternalMessageWithClient(client: pg.PoolClient, inp
       const paused = await client.query(
         `UPDATE sp_sales_workflow_enrollments
          SET status='paused', pause_reason='customer_reply', next_action_at=NULL, updated_at=now()
-         WHERE workspace_id=$1 AND lead_id=$2 AND status='active' AND started_at < $3
+         WHERE workspace_id=$1 AND lead_id=$2 AND status='active'
          RETURNING id`,
-        [input.workspaceId, linkedLeadId, timestamp]
+        [input.workspaceId, linkedLeadId]
       );
       if (paused.rows.length) {
         await client.query(
