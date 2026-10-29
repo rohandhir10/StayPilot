@@ -20,6 +20,7 @@ GitHub is the only code source of truth. Railway and Vercel should be connected 
 
 - **Frontend:** presentation, user interactions, field hints, signed-in token retrieval. It must never decide permissions by itself.
 - **API:** authenticated user identity, verified-email check when claiming an invite, workspace membership and role, schema validation, source attribution, duplicate hints, rate limits, business transactions, webhook verification, idempotency, audit/activity entries.
+- **Proxy trust:** forwarded client-IP headers are trusted only when the direct peer matches the explicit `TRUSTED_PROXY_CIDRS` allowlist. Production must use narrow, provider-confirmed ingress ranges; never use a universal CIDR.
 - **PostgreSQL:** foreign keys, unique constraints, status constraints, transactional persistence, persisted idempotency/rate-limit state.
 - **Clerk:** session creation, verification, recovery, session token validation, Backend API for account profile lookup.
 - **Provider accounts:** Meta/Turnstile credentials are configured by the owner in the secret store; integration eligibility and permissions must be approved at the provider.
