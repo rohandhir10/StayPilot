@@ -26,11 +26,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-      # A package-lock.json is intentionally not fabricated; commit one after
-      # running npm install in a network-enabled environment, then switch this
-      # step to `npm ci` for deterministic dependency resolution.
+      # Until a committed lockfile is available, npm install resolves from package.json.
+      # The audit step below makes the current resolution's advisories visible in CI.
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: npm install --no-fund
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
       - name: Typecheck
         run: npm run typecheck
       - name: Unit tests
