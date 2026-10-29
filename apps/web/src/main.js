@@ -8,8 +8,23 @@ if (!CLERK_PUBLISHABLE_KEY) {
   document.body.innerHTML = '<main style="max-width:680px;margin:12vh auto;padding:32px;font:16px/1.6 system-ui;color:#203047"><h1>StayPilot needs configuration</h1><p>Set <code>VITE_CLERK_PUBLISHABLE_KEY</code> and <code>VITE_API_BASE_URL</code> in your local environment or Vercel project settings, then rebuild.</p></main>';
   throw new Error('Missing VITE_CLERK_PUBLISHABLE_KEY');
 }
+async function loadClerkUi(publishableKey) {
+  const encodedDomain = publishableKey.split('_')[2];
+  if (!encodedDomain) throw new Error('The Clerk publishable key is malformed.');
+  const clerkDomain = atob(encodedDomain).slice(0, -1);
+  await new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = `https://${clerkDomain}/npm/@clerk/ui@1/dist/ui.browser.js`;
+    script.async = true;
+    script.crossOrigin = 'anonymous';
+    script.onload = resolve;
+    script.onerror = () => reject(new Error('Could not load the Clerk UI bundle.'));
+    document.head.appendChild(script);
+  });
+}
+await loadClerkUi(CLERK_PUBLISHABLE_KEY);
 const clerk = new Clerk(CLERK_PUBLISHABLE_KEY);
-await clerk.load({ signInUrl: '/login', signInFallbackRedirectUrl: '/', afterSignOutUrl: '/login' });
+await clerk.load({ ui: { ClerkUI: window.__internal_ClerkUICtor }, signInUrl: '/login', signInFallbackRedirectUrl: '/', afterSignOutUrl: '/login' });
 let leads=[],currentView="overview",searchTerm="",toastTimer,workspaceSession=null;
 const demo=[];
 function esc(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}function money(v){v=Number(v)||0;return v>=1e7?"₹"+(v/1e7).toFixed(1)+"Cr":v>=1e5?"₹"+(v/1e5).toFixed(v>=1e6?1:0)+"L":v>=1e3?"₹"+(v/1e3).toFixed(0)+"k":"₹"+v.toLocaleString("en-IN");}function dateShort(v){if(!v)return"—";const d=new Date(v);return isNaN(d)?"—":d.toLocaleDateString("en-IN",{day:"numeric",month:"short"});}function dateTime(v){if(!v)return"Not scheduled";const d=new Date(v);return isNaN(d)?"Not scheduled":d.toLocaleString("en-IN",{day:"numeric",month:"short",hour:"numeric",minute:"2-digit"});}function statusClass(s){return({"New inquiry":"s-new","Contacted":"s-contacted","Proposal sent":"s-proposal","Negotiation":"s-negotiation","Confirmed":"s-confirmed","Lost":"s-lost"})[s]||"s-new";}function initials(s){return String(s||"?").split(/\s+/).filter(Boolean).slice(0,2).map(x=>x[0]).join("").toUpperCase();}
