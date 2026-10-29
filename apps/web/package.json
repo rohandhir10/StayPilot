@@ -1,0 +1,21 @@
+{
+  "name": "staypilot-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@clerk/clerk-js": "^5.60.0",
+    "firebase": "^11.10.0"
+  },
+  "devDependencies": {
+    "vite": "^6.4.1"
+  }
+}
