@@ -195,14 +195,19 @@ export function renderSalesWorkflow(box, { leads, api, workspaceSession, isPrevi
       return '<div class="wf-sequence-panel"><div><b>Start a persistent sequence</b><p>StayPilot will save one internal task at a time, create the next task when the current one is completed, pause when a new inbound message is ingested for a linked customer conversation, and stop when the enquiry closes. It will not send messages or confirm commercial details.</p></div><button type="button" class="btn btn-primary" data-wf-action="start-sequence" ' + (canWrite && !["Confirmed", "Lost"].includes(lead?.status) ? "" : "disabled") + '>Start sequence</button></div>';
     }
     const paused = enrollment.enrollment_status === "paused";
-    const taskDue = enrollment.task_scheduled_at ? new Date(enrollment.task_scheduled_at).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }) : "No current task";
+    const taskDueTimestamp = enrollment.task_scheduled_at ? new Date(enrollment.task_scheduled_at).getTime() : Number.NaN;
+    const taskIsDue = Number.isFinite(taskDueTimestamp) && taskDueTimestamp <= Date.now();
+    const taskDue = Number.isFinite(taskDueTimestamp)
+      ? new Date(taskDueTimestamp).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })
+      : "No current task";
     const pausedLabel = enrollment.pause_reason === "customer_reply" ? "A new inbound customer message paused this sequence. Review the conversation before resuming." : "This sequence is paused.";
     return '<div class="wf-sequence-panel ' + (paused ? "wf-sequence-warning" : "") + '">' +
       '<div class="wf-sequence-title"><div><small>PERSISTENT SEQUENCE</small><b>' + esc((playbooks.find(item => item.id === enrollment.sequence_key) || playbooks.find(item => item.id === selectedPlaybook) || playbooks[3]).title) + '</b></div><span class="wf-stage">' + esc(paused ? "Paused" : "Active") + '</span></div>' +
       (paused ? '<p class="wf-sequence-note">' + esc(pausedLabel) + '</p>' : '') +
       (enrollment.task_id ? '<div class="wf-current-task"><small>STEP ' + esc(enrollment.task_step_number) + ' · NEXT ACTION ' + esc(taskDue) + '</small><b>' + esc(enrollment.task_title || "Current workflow task") + '</b><p>' + esc(enrollment.task_instructions || "Complete this task only after verifying the required facts.") + '</p></div>' : '<p class="wf-sequence-note">No scheduled task is attached to this workflow. Refresh the queue and review its state before continuing.</p>') +
+      (!paused && enrollment.task_id && !taskIsDue ? '<p class="wf-sequence-note">This task is scheduled for ' + esc(taskDue) + ' and cannot be completed early.</p>' : '') +
       '<div class="wf-sequence-actions">' +
-      (paused ? '<button type="button" class="btn btn-primary" data-wf-action="resume-sequence" ' + (canWrite ? "" : "disabled") + '>' + (enrollment.pause_reason === "customer_reply" ? "Resume after reply review" : "Resume sequence") + '</button>' : '<button type="button" class="btn btn-secondary" data-wf-action="complete-step" ' + (canWrite && enrollment.task_id ? "" : "disabled") + '>Mark task complete</button><button type="button" class="btn btn-secondary" data-wf-action="pause-sequence" ' + (canWrite ? "" : "disabled") + '>Pause</button>') +
+      (paused ? '<button type="button" class="btn btn-primary" data-wf-action="resume-sequence" ' + (canWrite ? "" : "disabled") + '>' + (enrollment.pause_reason === "customer_reply" ? "Resume after reply review" : "Resume sequence") + '</button>' : '<button type="button" class="btn btn-secondary" data-wf-action="complete-step" ' + (canWrite && enrollment.task_id && taskIsDue ? "" : "disabled") + '>Mark task complete</button><button type="button" class="btn btn-secondary" data-wf-action="pause-sequence" ' + (canWrite ? "" : "disabled") + '>Pause</button>') +
       '<button type="button" class="btn btn-secondary" data-wf-action="cancel-sequence" ' + (canWrite ? "" : "disabled") + '>Cancel sequence</button><button type="button" class="btn btn-secondary" data-wf-action="refresh-queue">Refresh</button></div>' +
       '<p class="wf-footnote">Tasks and timing are saved. Message sending, pricing, inventory checks and booking confirmation are not automated.</p></div>';
   }
