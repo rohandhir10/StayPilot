@@ -36,13 +36,31 @@ export async function registerChannelRoutes(app: FastifyInstance): Promise<void>
     const body = request.body && typeof request.body === 'object' && !Array.isArray(request.body)
       ? request.body as Record<string, unknown> : {};
     const channelKey = body.channel_key;
-    if (channelKey !== 'email_gmail' && channelKey !== 'email_outlook') {
+    if (channelKey !== undefined && channelKey !== 'email_gmail' && channelKey !== 'email_outlook') {
       return fail(reply, 400, 'Choose Gmail or Outlook by setting channel_key to email_gmail or email_outlook.', 'invalid_mail_channel');
     }
     try {
-      const result = await syncMailboxForWorkspace(member, channelKey);
+      if (channelKey === 'email_gmail' || channelKey === 'email_outlook') {
+        const result = await syncMailboxForWorkspace(member, channelKey);
+        noStore(reply);
+        return reply.send(result);
+      }
+      const connected = await pool.query<{ channel_key: 'email_gmail' | 'email_outlook' }>(
+        "SELECT channel_key FROM sp_channel_oauth_credentials WHERE workspace_id=$1 ORDER BY channel_key", [member.workspace_id]
+      );
+      if (!connected.rows.length) return fail(reply, 409, 'No email mailbox is connected to this workspace yet.', 'mail_not_connected');
+      const results: Array<Record<string, unknown>> = [];
+      for (const connection of connected.rows) {
+        try {
+          results.push({ ...(await syncMailboxForWorkspace(member, connection.channel_key)), ok: true });
+        } catch (error) {
+          const connector = error instanceof MailSyncError ? error : new MailSyncError('mail_sync_failed', 502);
+          results.push({ channel_key: connection.channel_key, ok: false, code: connector.code, message: connector.message });
+        }
+      }
+      const importedTotal = results.reduce((sum, result) => sum + (typeof result.imported_count === 'number' ? result.imported_count : 0), 0);
       noStore(reply);
-      return reply.send(result);
+      return reply.send({ ok: results.every(result => result.ok === true), imported_total: importedTotal, results });
     } catch (error) {
       const connector = error instanceof MailSyncError ? error : new MailSyncError('mail_sync_failed', 502);
       return fail(reply, connector.statusCode, connector.message, connector.code);
