@@ -81,11 +81,23 @@ export const inviteSchema = z.object({
   role: z.enum(['admin', 'sales', 'viewer'])
 });
 
+export const leadListQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(250).default(100),
+  cursor: z.string().min(1).max(512).optional()
+});
+
 export const conversationQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(50),
+  cursor: z.string().min(1).max(512).optional(),
   channel: z.string().max(64).optional(),
   status: z.enum(['open', 'pending', 'closed']).optional(),
   q: z.string().trim().max(120).optional()
+});
+
+export const messageQuerySchema = z.object({
+  conversation_id: z.string().uuid(),
+  limit: z.coerce.number().int().min(1).max(200).default(200),
+  cursor: z.string().min(1).max(512).optional()
 });
 
 export const noteSchema = z.object({

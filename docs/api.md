@@ -1,6 +1,6 @@
 # API reference
 
-All paths include `/api`. Private endpoints require `Authorization: Bearer <Clerk session token>`, except the partner endpoint which uses its own `sp_live_…` key. Private responses use `Cache-Control: no-store`.
+All paths include `/api`. Private endpoints require `Authorization: Bearer <Clerk session token>`, except the partner endpoint which uses its own `sp_live_…` key. Private responses use `Cache-Control: no-store`. Collection endpoints use keyset pagination: pass `next_cursor` back as `cursor` until `has_more` is false. Cursors are opaque, validated seek positions and do not replace workspace authorization.
 
 ## Health
 
@@ -25,7 +25,7 @@ All paths include `/api`. Private endpoints require `Authorization: Bearer <Cler
 
 | Method | Route | Access | Purpose |
 |---|---|---|---|
-| GET | `/api/leads/list?limit=100` | Clerk + active member | Workspace-scoped list and human-review duplicate candidates |
+| GET | `/api/leads/list?limit=100&cursor=…` | Clerk + active member | Workspace-scoped list and human-review duplicate candidates |
 | POST | `/api/leads/create` | Owner/admin/sales | Validate and create an inquiry + activity + audit in one transaction |
 | POST | `/api/leads/update` | Owner/admin/sales | Update allowed fields and log activity/audit |
 | GET | `/api/leads/activities?id=<uuid>` | Clerk + active member | Read recent activity after checking workspace membership |
@@ -35,8 +35,8 @@ All paths include `/api`. Private endpoints require `Authorization: Bearer <Cler
 
 | Method | Route | Access | Purpose |
 |---|---|---|---|
-| GET | `/api/inbox/conversations?limit=50&channel=whatsapp&q=search` | Clerk + active member | Search and filter conversations |
-| GET | `/api/inbox/messages?conversation_id=<uuid>` | Clerk + active member | Return latest 200 messages in chronological order |
+| GET | `/api/inbox/conversations?limit=50&channel=whatsapp&q=search&cursor=…` | Clerk + active member | Search and filter conversations |
+| GET | `/api/inbox/messages?conversation_id=<uuid>&limit=200&cursor=…` | Clerk + active member | Return latest 200 messages in chronological order |
 | POST | `/api/inbox/messages` | Owner/admin/sales | Create an internal note; never sends an external message |
 | POST | `/api/inbox/link` | Owner/admin/sales | Link/unlink a conversation and workspace inquiry; human action is required |
 | GET | `/api/channels/status` | Clerk + active member | Channel state, last sync/webhook, stable error codes only |

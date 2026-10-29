@@ -3,7 +3,8 @@ import { pool, inTransaction } from '../db.js';
 import { requireWorkspaceMember, type MemberRole } from '../auth.js';
 import { fail, noStore } from '../http.js';
 import { createLeadRecord, auditEvent } from '../domain.js';
-import { leadSchema, leadUpdateSchema } from '../validation.js';
+import { leadListQuerySchema, leadSchema, leadUpdateSchema } from '../validation.js';
+import { decodePageCursor, encodePageCursor } from '../pagination.js';
 
 const writerRoles: MemberRole[] = ['owner', 'admin', 'sales'];
 
@@ -19,17 +20,30 @@ export async function registerLeadRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/leads/list', async (request, reply) => {
     const member = await requireWorkspaceMember(request, reply);
     if (!member) return;
-    const rawLimit = Number((request.query as Record<string, unknown>)?.limit ?? 100);
-    const limit = Number.isInteger(rawLimit) ? Math.max(1, Math.min(rawLimit, 250)) : 100;
+    const parsedQuery = leadListQuerySchema.safeParse(request.query);
+    if (!parsedQuery.success) return fail(reply, 400, 'Inquiry list filters are invalid.', 'invalid_lead_query');
+    const { limit } = parsedQuery.data;
+    const cursor = parsedQuery.data.cursor ? decodePageCursor(parsedQuery.data.cursor) : null;
+    if (parsedQuery.data.cursor && !cursor) return fail(reply, 400, 'Inquiry list cursor is invalid or expired.', 'invalid_page_cursor');
     try {
-      const { rows } = await pool.query(
+      const result = await pool.query(
         `SELECT id, workspace_id, client_name, company_name, client_email, client_phone, agent_name, agent_email,
                 property_name, inquiry_type, check_in, check_out, guests, estimated_value, source, status,
-                assigned_to, last_contact_at, next_follow_up, notes, created_at, updated_at
-         FROM leads WHERE workspace_id = $1 ORDER BY created_at DESC, id DESC LIMIT $2`,
-        [member.workspace_id, limit]
+                assigned_to, last_contact_at, next_follow_up, notes, created_at, updated_at,
+                created_at::text AS cursor_created_at
+         FROM leads
+         WHERE workspace_id=$1
+           AND ($2::timestamptz IS NULL OR (created_at, id) < ($2::timestamptz, $3::uuid))
+         ORDER BY created_at DESC, id DESC LIMIT $4`,
+        [member.workspace_id, cursor?.sortAt ?? null, cursor?.id ?? null, limit + 1]
       );
-      const leads = rows.map(lead => {
+      const hasMore = result.rows.length > limit;
+      const rows = result.rows.slice(0, limit);
+      const lastRow = rows[rows.length - 1];
+      const nextCursor = hasMore && lastRow ? encodePageCursor({ sortAt: lastRow.cursor_created_at, id: lastRow.id }) : null;
+      const resultLeads = rows.map(lead => {
+        const { cursor_created_at: _cursorCreatedAt, ...visibleLead } = lead;
+        // Duplicate hints are bounded to the current page rather than scanning the whole workspace.
         const candidates = rows.filter(other => other.id !== lead.id && (
           (norm(lead.client_email) && norm(lead.client_email) === norm(other.client_email)) ||
           (norm(lead.client_phone) && norm(lead.client_phone) === norm(other.client_phone)) ||
@@ -40,10 +54,10 @@ export async function registerLeadRoutes(app: FastifyInstance): Promise<void> {
           agent_name: other.agent_name, property_name: other.property_name, check_in: other.check_in,
           check_out: other.check_out, status: other.status, estimated_value: other.estimated_value
         }));
-        return { ...lead, duplicate_candidates: candidates };
+        return { ...visibleLead, duplicate_candidates: candidates };
       });
       noStore(reply);
-      return reply.send({ leads, count: leads.length, limit, truncated: leads.length === limit });
+      return reply.send({ leads: resultLeads, count: resultLeads.length, limit, has_more: hasMore, next_cursor: nextCursor, truncated: hasMore });
     } catch {
       return fail(reply, 500, 'Could not load inquiries.', 'leads_list_failed');
     }
