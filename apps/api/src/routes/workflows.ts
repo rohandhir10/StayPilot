@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { inTransaction } from '../db.js';
+import { inTransaction, pool } from '../db.js';
 import { requireWorkspaceMember, type MemberRole } from '../auth.js';
 import { auditEvent } from '../domain.js';
 import { fail, noStore } from '../http.js';
@@ -123,7 +123,7 @@ export async function registerWorkflowRoutes(app: FastifyInstance): Promise<void
     const parsed = workflowQueueQuerySchema.safeParse(request.query);
     if (!parsed.success) return fail(reply, 400, 'Workflow queue filters are invalid.', 'invalid_workflow_query');
     try {
-      const result = await (await import('../db.js')).pool.query(
+      const result = await pool.query(
         `SELECT
            e.id AS enrollment_id, e.workspace_id, e.lead_id, e.sequence_key, e.status AS enrollment_status,
            e.current_step, e.next_action_at, e.pause_reason, e.stop_reason, e.started_at, e.updated_at AS enrollment_updated_at,
@@ -159,7 +159,7 @@ export async function registerWorkflowRoutes(app: FastifyInstance): Promise<void
     if (!sequenceKey(input.sequence_key)) return fail(reply, 400, 'Choose a supported hotel-sales workflow.', 'invalid_sequence_key');
 
     try {
-      const outcome = await (await import('../db.js')).inTransaction(async client => {
+      const outcome = await inTransaction(async client => {
         const leadResult = await client.query(
           `SELECT id, client_name, company_name, client_email, client_phone, property_name, inquiry_type,
                   check_in::text AS check_in, check_out::text AS check_out, status, next_follow_up
@@ -217,7 +217,7 @@ export async function registerWorkflowRoutes(app: FastifyInstance): Promise<void
         await client.query(
           `INSERT INTO lead_activities (workspace_id, lead_id, activity_type, description, actor_user_id, actor_email, actor)
            VALUES ($1,$2,'workflow_started',$3,$4,$5,$6)`,
-          [member.workspace_id, lead.id, `Started the ${template.title} workflow after the required duplicate review.`.slice(0, 500), member.user_id, member.email, member.display_name]
+          [member.workspace_id, lead.id, `Started the ${template.title} workflow${duplicates.rows.length ? ' after reviewing possible overlaps' : ''}.`.slice(0, 500), member.user_id, member.email, member.display_name]
         );
         await auditEvent(client, {
           workspaceId: member.workspace_id, actor: member, action: 'workflow.started',
