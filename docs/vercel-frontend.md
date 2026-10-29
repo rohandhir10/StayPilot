@@ -42,8 +42,10 @@ A successful Vercel static build does not prove that Google sign-in, Firebase to
 
 ## Troubleshooting: existing preview still says “StayPilot needs configuration”
 
-That message is from an older, already-built Clerk frontend. The source on `audit/fix-hardening` has been migrated to Firebase Auth and includes a read-only preview mode. Vercel environment changes do not alter an existing deployment; Vercel must build the latest branch after these changes.
+That message belongs to an older, immutable Clerk build. The `audit/fix-hardening` branch now uses Firebase Auth and contains a separate read-only preview mode. Vercel environment changes only apply after a build, and an old deployment URL continues serving its original source.
 
-The connected Vercel API available during this task returned permission errors for preview deployment creation and project creation, so a new deployment could not be triggered through that connection. In Vercel, connect the `rohandhir10/StayPilot` Git repository to the frontend project (or restore deploy permissions), keep the root directory at `apps/web`, and deploy branch `audit/fix-hardening` as a **Preview**, not Production. The project already has `VITE_PREVIEW_MODE=true` scoped to Preview. That build should show explicitly labeled sample inquiries in read-only mode without Clerk or Firebase values. Do not reuse the old immutable deployment URL to verify the new source.
+The current branch preview build was verified as **READY** from commit `f94aa6366415a5bce33fad9c5fdce6885f70a058`. Use the [current branch preview](https://stay-pilot-git-audit-fix-hardening-rohandhir10s-projects.vercel.app/) or its current immutable deployment URL, not a URL from an older failed build. Preview deployments may require signing into the Vercel team because deployment protection is enabled.
+
+The Vercel project has `VITE_PREVIEW_MODE=true` scoped to Preview. This should show labeled sample inquiries in read-only mode without requiring Clerk or Firebase values and without calling the live API. Never set this flag in Production.
 
 Live Google sign-in remains separate from the read-only preview and requires the real Firebase Web App config in Vercel plus the Firebase Admin service-account JSON and owner UID in Railway.
