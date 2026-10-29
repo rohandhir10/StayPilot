@@ -47,13 +47,13 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Apply schema migrations to the isolated CI database
-        run: npm run migrate
       # A package-lock.json is intentionally not fabricated; commit one after
       # running npm install in a network-enabled environment, then switch this
       # step to `npm ci` for deterministic dependency resolution.
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+      - name: Apply schema migrations to the isolated CI database
+        run: npm run migrate
       - name: Typecheck
         run: npm run typecheck
       - name: Unit tests
