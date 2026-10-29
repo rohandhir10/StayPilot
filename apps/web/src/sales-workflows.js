@@ -192,7 +192,7 @@ export function renderSalesWorkflow(box, { leads, api, workspaceSession, isPrevi
     }
     const enrollment = enrollments.find(item => item.lead_id === lead?.id);
     if (!enrollment) {
-      return '<div class="wf-sequence-panel"><div><b>Start a persistent sequence</b><p>StayPilot will save one internal task at a time, create the next task when the current one is completed, pause when a linked customer conversation receives a newer reply, and stop when the enquiry closes. It will not send messages or confirm commercial details.</p></div><button type="button" class="btn btn-primary" data-wf-action="start-sequence" ' + (canWrite && !["Confirmed", "Lost"].includes(lead?.status) ? "" : "disabled") + '>Start sequence</button></div>';
+      return '<div class="wf-sequence-panel"><div><b>Start a persistent sequence</b><p>StayPilot will save one internal task at a time, create the next task when the current one is completed, pause when a new inbound message is ingested for a linked customer conversation, and stop when the enquiry closes. It will not send messages or confirm commercial details.</p></div><button type="button" class="btn btn-primary" data-wf-action="start-sequence" ' + (canWrite && !["Confirmed", "Lost"].includes(lead?.status) ? "" : "disabled") + '>Start sequence</button></div>';
     }
     const paused = enrollment.enrollment_status === "paused";
     const taskDue = enrollment.task_scheduled_at ? new Date(enrollment.task_scheduled_at).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }) : "No current task";
