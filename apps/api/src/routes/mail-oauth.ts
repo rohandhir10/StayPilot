@@ -63,7 +63,7 @@ function page(reply: FastifyReply, success: boolean, message: string, statusCode
   const html = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' +
     title + ' · StayPilot</title><style>body{font:15px/1.65 -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;background:#f5f7fb;color:#24364b;margin:0;padding:36px}.card{max-width:520px;margin:9vh auto;background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:28px}h1{font-size:22px;color:' +
     colour + '}p{color:#6e7e91}small{color:#8b97a8}</style></head><body><main class="card"><h1>' + title + '</h1><p>' +
-    message + '</p><small>StayPilot has read-only mailbox access. It does not send email. Close this window and return to the Action Centre.</small></main></body></html>';
+    message + '</p><small>This connection requests read-only mailbox access. StayPilot does not send email. Close this window and return to the Action Centre.</small></main></body></html>';
   return reply.code(statusCode).type('text/html; charset=utf-8').send(html);
 }
 async function providerJson(url: string, init: RequestInit): Promise<JsonRecord> {
@@ -84,7 +84,7 @@ async function accountProfile(provider: Provider, accessToken: string): Promise<
   const profile = await providerJson(url, { headers: { Authorization: 'Bearer ' + accessToken, Accept: 'application/json' } });
   if (provider === 'google') {
     const id = asString(profile.sub), email = asString(profile.email);
-    if (!id || !email || profile.email_verified === false) throw new OAuthError('mail_profile_unverified', 403, 'The provider did not return a verified account email.');
+    if (!id || !email || profile.email_verified !== true) throw new OAuthError('mail_profile_unverified', 403, 'The provider did not return a verified account email.');
     return { id, label: email.slice(0, 320) };
   }
   const id = asString(profile.id), email = asString(profile.mail) || asString(profile.userPrincipalName);
@@ -142,6 +142,9 @@ async function finishOAuth(provider: Provider, stateValue: string, code: string)
   const tokens = await providerJson(config.tokenEndpoint, {
     method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' }, body
   });
+  const grantedScopes = asString(tokens.scope).split(/\\s+/).filter(Boolean).map(scope => scope.toLowerCase());
+  const requiredMailScope = provider === 'google' ? 'https://www.googleapis.com/auth/gmail.readonly' : 'mail.read';
+  if (grantedScopes.length && !grantedScopes.includes(requiredMailScope)) throw new OAuthError('mail_read_scope_missing', 403, 'Read-only mailbox permission was not granted. No mailbox was connected.');
   const accessToken = asString(tokens.access_token), refreshToken = asString(tokens.refresh_token), expiresIn = Number(tokens.expires_in);
   if (!accessToken || !refreshToken) throw new OAuthError('mail_refresh_token_missing', 502, 'The provider did not issue a refresh token. Reconnect with offline access enabled.');
   if (!Number.isFinite(expiresIn) || expiresIn < 60 || expiresIn > 86400) throw new OAuthError('mail_token_expiry_invalid', 502);
