@@ -1,9 +1,8 @@
 import { apiRequest } from './lib/api.js';
-import { firebaseAuth, firebaseConfigured, waitForAuthReady } from './lib/firebase.js';
-import { signOut } from 'firebase/auth';
+import { clerkConfigured, waitForAuthReady, signOut } from './lib/clerk.js';
 import { renderSalesWorkflow } from './sales-workflows.js';
 
-const PREVIEW_MODE = import.meta.env.VITE_PREVIEW_MODE === 'true' || (import.meta.env.DEV && !firebaseConfigured);
+const PREVIEW_MODE = import.meta.env.VITE_PREVIEW_MODE === 'true' || (import.meta.env.DEV && !clerkConfigured);
 const $=s=>document.querySelector(s);const $$=s=>[...document.querySelectorAll(s)];
 let leads=[],currentView="overview",searchTerm="",toastTimer,workspaceSession=null;
 const demoDate = days => new Date(Date.now() + days * 86400000).toISOString();
@@ -314,7 +313,7 @@ document.addEventListener("click",e=>{const n=e.target.closest("[data-view]"),g=
 if(signOutButton){
   signOutButton.addEventListener("click",async()=>{
     if(PREVIEW_MODE){toast("Read-only preview: sign-in is disabled.");return;}
-    try{if(firebaseAuth)await signOut(firebaseAuth);}finally{location.replace("/login");}
+    try{await signOut();}finally{location.replace("/login");}
   });
 }
 loadLeads();
