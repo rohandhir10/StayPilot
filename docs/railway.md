@@ -4,7 +4,7 @@
 
 The connected Railway project is `endearing-expression`. It contains the StayPilot API service and a private `Postgres` service. The API is connected to `rohandhir10/StayPilot` on branch `audit/fix-hardening`, with root directory `apps/api`, public service domain `https://staypilot-production-f8a6.up.railway.app`, pre-deploy command `npm run migrate:prod`, and health check `/api/health/ready`.
 
-The database service deployed successfully, but the most recent API deployment failed during its migration pre-deploy command. Do not treat the API as live until database TLS, migrations, Firebase credentials, health checks, and a real authenticated browser-to-API test pass.
+The API process is currently running and its latest Railway deployment is marked successful; its readiness check passes, including the required workflow schema migration. However, the Railway service currently has no `FIREBASE_PROJECT_ID`, `FIREBASE_SERVICE_ACCOUNT_JSON`, or `OWNER_FIREBASE_UID` variables. Protected CRM endpoints therefore cannot authenticate users yet and will return a configuration error. Treat the API process as healthy but the product as **not end-to-end ready** until Firebase is configured, the Vercel Firebase web settings are added, and an authenticated browser-to-API workflow is tested. The latest Vercel build attempt was blocked by a deployment-rate limit, so the newest UI changes have not been published.
 
 ## 1. PostgreSQL service and private connection
 
