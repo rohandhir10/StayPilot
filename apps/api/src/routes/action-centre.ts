@@ -42,13 +42,13 @@ async function buildCandidates(member: WorkspaceMember): Promise<Candidate[]> {
     const label = lead.company_name || lead.client_name || 'this inquiry';
     const owner = lead.assigned_to?.trim() || 'Unassigned';
     const next = lead.next_follow_up ? (lead.next_follow_up instanceof Date ? lead.next_follow_up : new Date(lead.next_follow_up)) : null;
-    if (next && !Number.isNaN(next.getTime()) && next.getTime() <= now + 24 * 60 * 60 * 1000) {
+    if (next && !Number.isNaN(next.getTime())) {
       const overdue = next.getTime() < now;
       candidates.push({
-        taskKey: `lead:${lead.id}:follow-up:${next.toISOString()}`, sourceType: 'crm_rule', category: 'follow_up',
-        title: (overdue ? 'Overdue follow-up · ' : 'Follow up · ') + label,
+        taskKey: `lead:${lead.id}:follow-up`, sourceType: 'crm_rule', category: 'follow_up',
+        title: (overdue ? 'Overdue follow-up · ' : next.getTime() <= now + 24 * 60 * 60 * 1000 ? 'Follow up · ' : 'Scheduled follow-up · ') + label,
         description: 'A follow-up is scheduled in the inquiry record. Review the latest conversation and record the outcome; this task does not mean a message was sent.',
-        priority: overdue ? 'urgent' : 'high', assignedTo: owner,
+        priority: overdue ? 'urgent' : next.getTime() <= now + 24 * 60 * 60 * 1000 ? 'high' : 'normal', assignedTo: owner,
         dueAt: next.toISOString(), leadId: lead.id, conversationId: null, sourceMessageId: null,
         evidenceText: 'CRM next follow-up: ' + next.toISOString(), evidenceChannel: 'crm', confidence: 'high'
       });
@@ -161,14 +161,19 @@ async function refreshCandidates(member: WorkspaceMember): Promise<number> {
       )
       ON CONFLICT (workspace_id, task_key) DO UPDATE SET
         title=EXCLUDED.title, description=EXCLUDED.description, priority=EXCLUDED.priority,
+        status=CASE WHEN sp_action_tasks.due_at IS DISTINCT FROM EXCLUDED.due_at THEN 'open' ELSE sp_action_tasks.status END,
+        completed_at=CASE WHEN sp_action_tasks.due_at IS DISTINCT FROM EXCLUDED.due_at THEN NULL ELSE sp_action_tasks.completed_at END,
+        completed_by_user_id=CASE WHEN sp_action_tasks.due_at IS DISTINCT FROM EXCLUDED.due_at THEN NULL ELSE sp_action_tasks.completed_by_user_id END,
+        completion_note=CASE WHEN sp_action_tasks.due_at IS DISTINCT FROM EXCLUDED.due_at THEN '' ELSE sp_action_tasks.completion_note END,
         assigned_to=CASE WHEN sp_action_tasks.assigned_to='Unassigned' THEN EXCLUDED.assigned_to ELSE sp_action_tasks.assigned_to END,
-        due_at=COALESCE(sp_action_tasks.due_at, EXCLUDED.due_at),
+        due_at=EXCLUDED.due_at,
         lead_id=COALESCE(sp_action_tasks.lead_id, EXCLUDED.lead_id),
         conversation_id=COALESCE(sp_action_tasks.conversation_id, EXCLUDED.conversation_id),
         source_message_id=COALESCE(sp_action_tasks.source_message_id, EXCLUDED.source_message_id),
         evidence_text=EXCLUDED.evidence_text, evidence_channel=EXCLUDED.evidence_channel,
         confidence=EXCLUDED.confidence, updated_at=now()
       WHERE sp_action_tasks.status='open'
+         OR (sp_action_tasks.category='follow_up' AND sp_action_tasks.due_at IS DISTINCT FROM EXCLUDED.due_at)
       RETURNING id`,
       [member.workspace_id, JSON.stringify(records), member.user_id]
     );
