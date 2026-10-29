@@ -1,44 +1,40 @@
 # Vercel frontend setup
 
-The reference dashboard is in `apps/web/` and is built with Vite. Set the Vercel project root directory to **`apps/web`**; don't point Vercel at the repository root or `apps/api`.
+The dashboard is in `apps/web/` and uses Vite. Set the Vercel project root directory to **`apps/web`**, build command to `npm run build`, and output directory to `dist`. Do not point Vercel at `apps/api`.
 
-## Required Vercel environment variables
+## Environment variables
 
-| Variable | Example | Notes |
+| Variable | Where | Purpose |
 |---|---|---|
-| `VITE_API_BASE_URL` | `https://your-railway-api-domain.example` | API origin; the client adds `/api` if omitted. Do not include an endpoint path other than the optional `/api` suffix. |
-| `VITE_CLERK_PUBLISHABLE_KEY` | `pk_live_…` | Public browser key from the Clerk Dashboard. Never add the Clerk secret key to Vercel frontend variables. |
+| `VITE_API_BASE_URL` | Vercel (all environments) | HTTPS Railway API URL, with or without the `/api` suffix. |
+| `VITE_FIREBASE_API_KEY` | Vercel (all environments) | Public Firebase Web App API key. |
+| `VITE_FIREBASE_AUTH_DOMAIN` | Vercel (all environments) | Firebase Auth domain, typically `<project-id>.firebaseapp.com`. |
+| `VITE_FIREBASE_PROJECT_ID` | Vercel (all environments) | Firebase project ID. |
+| `VITE_FIREBASE_APP_ID` | Vercel (all environments) | Firebase Web App ID. |
+| `VITE_PREVIEW_MODE` | Vercel Preview only | Set to `true` to show read-only sample records without requesting live API data. Do not set this for Production. |
 
-Add variables to Development/Preview/Production environments as appropriate, then redeploy after changing them. For local development, copy `.env.example` to `.env` and use the local API origin.
+The Firebase web config is public browser configuration, not an Admin credential. Never put `FIREBASE_SERVICE_ACCOUNT_JSON` or any private key in Vercel. After changing variables, deploy a fresh build.
 
-## Build and routes
+## Google sign-in
 
-The project uses `npm run build` and outputs `dist/`. Vite builds three entry pages: the dashboard (`/`), Clerk sign-in (`/login`), and the public, Turnstile-protected inquiry form (`/inquiry`). Vercel rewrites these friendly paths to their HTML files.
+In Firebase Console, register a Web App, enable **Authentication → Sign-in method → Google**, and add each intended Vercel hostname under **Authentication → Settings → Authorized domains**. The sign-in page uses Google OAuth through Firebase Auth; users still need StayPilot workspace membership before accessing actual CRM records.
+
+## Routes and preview behavior
+
+Vite builds the dashboard (`/`), Google sign-in (`/login`), and public, Turnstile-protected inquiry form (`/inquiry`). Vercel rewrites the friendly paths to their HTML entries.
+
+When `VITE_PREVIEW_MODE=true` is configured for Preview, the dashboard shows clearly marked demo records in read-only mode. It does not call the CRM API or write data. This makes UI review possible before Firebase credentials and the API are fully configured. Keep this flag Preview-only.
 
 ## API and CORS
 
-The frontend obtains a Clerk session token and sends it in the `Authorization: Bearer` header for private API requests. The API still performs workspace membership and role checks; a signed-in Clerk user does not automatically gain CRM access.
+In configured deployments, the frontend obtains a Firebase ID token and sends it in the `Authorization: Bearer` header. The API verifies that token with Firebase Admin and separately enforces workspace membership and role permissions. A Google-authenticated user does not automatically gain CRM access.
 
-Set Railway `WEB_ORIGINS` to the exact scheme + host of each approved production and test deployment, e.g. `https://sales.example.com,https://stay-pilot-git-audit-fix-hardening-example.vercel.app`. No paths, trailing slashes, wildcards or arbitrary preview domains. If a preview URL changes, approve the specific new origin deliberately.
+Set Railway `WEB_ORIGINS` to the exact scheme + host of each approved origin. Avoid paths, trailing slashes, wildcards or arbitrary preview domains. Approve changed preview URLs deliberately.
 
 ## Public inquiry form
 
-`/inquiry` uses `GET /api/public/form-config` and `POST /api/public/inquiry` against the same API origin. Before using it, set both the Turnstile public site key and the server-side secret in the relevant environments. The API checks consent, rate limits and Turnstile token/hostname; submissions should fail closed while the security check is missing or invalid.
+`/inquiry` uses `GET /api/public/form-config` and `POST /api/public/inquiry` against the API. Before using it, set the Turnstile public site key and server-side secret in the relevant environments. Submissions fail closed while Turnstile is missing or invalid.
 
 ## Deployment verification boundary
 
-A successful Vercel static build does not confirm that the Railway API is online, CORS is correct, Clerk sessions are accepted, an invitation grants workspace access, or the Turnstile hostname is approved. Test those flows after configuring both services. External reply sending and mailbox sync remain deliberately unavailable in this release.
-
-
-## Troubleshooting: `500 FUNCTION_INVOCATION_FAILED` from `apps/api/src/config.ts`
-
-If the root page returns a server-side 500 and the function log reports missing `DATABASE_URL`, `CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY` and `WEB_ORIGINS`, Vercel is executing the API application as a function instead of serving the Vite frontend. Do **not** solve this by copying the API's private secrets into Vercel.
-
-For the `stay-pilot` Vercel project, the project build settings have been changed to Vite with Root Directory `apps/web`, build command `npm run build`, install command `npm install --no-audit --no-fund`, and output directory `dist`. The existing deployment was not redeployed as part of the configuration change; a fresh preview build is needed to verify the new settings.
-
-The Vercel project currently has **no environment variables configured**. Before the dashboard can sign in or call a live API, add:
-
-- `VITE_CLERK_PUBLISHABLE_KEY`: the public key from the real Clerk application.
-- `VITE_API_BASE_URL`: the HTTPS origin for the deployed Railway API (the client accepts an origin with or without the `/api` suffix).
-
-Do not set `DATABASE_URL` or `CLERK_SECRET_KEY` in the frontend project. Those belong in the backend service's secret settings. Railway must have a private PostgreSQL database, the required backend variables, and an HTTPS API domain before an end-to-end test can pass.
+A successful Vercel static build does not prove that Google sign-in, Firebase token verification, database migrations, CORS, invitations, or Turnstile work end to end. Real Firebase web config and the Admin service-account JSON must come from the Firebase project owner. Do not commit them.
