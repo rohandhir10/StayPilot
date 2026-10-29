@@ -256,6 +256,7 @@ export async function registerWorkflowRoutes(app: FastifyInstance): Promise<void
       const outcome = await inTransaction(async client => {
         const result = await client.query(
           `SELECT t.id AS task_id, t.workspace_id, t.enrollment_id, t.lead_id, t.step_number, t.status AS task_status,
+                  t.scheduled_at AS task_scheduled_at,
                   e.sequence_key, e.status AS enrollment_status, e.current_step,
                   l.status AS lead_status
            FROM sp_sales_workflow_tasks t
@@ -286,6 +287,11 @@ export async function registerWorkflowRoutes(app: FastifyInstance): Promise<void
           );
           await client.query('UPDATE leads SET next_follow_up=NULL, updated_at=now() WHERE workspace_id=$1 AND id=$2', [member.workspace_id, row.lead_id]);
           return { kind: 'lead_closed' as const };
+        }
+
+        const scheduledTime = new Date(row.task_scheduled_at).getTime();
+        if (!Number.isFinite(scheduledTime) || scheduledTime > Date.now()) {
+          return { kind: 'task_not_due' as const };
         }
 
         const template = templates[row.sequence_key as SequenceKey];
@@ -341,6 +347,7 @@ export async function registerWorkflowRoutes(app: FastifyInstance): Promise<void
       if (outcome.kind === 'task_missing') return fail(reply, 404, 'Workflow task not found.', 'workflow_task_not_found');
       if (outcome.kind === 'workflow_not_active') return fail(reply, 409, 'This workflow is paused or closed. Review its state before continuing.', 'workflow_not_active');
       if (outcome.kind === 'task_not_current') return fail(reply, 409, 'This task is already completed or is not the current step.', 'workflow_task_not_current');
+      if (outcome.kind === 'task_not_due') return fail(reply, 409, 'This task is scheduled for a future time and cannot be completed early.', 'workflow_task_not_due');
       if (outcome.kind === 'lead_closed') return fail(reply, 409, 'The enquiry is closed. StayPilot stopped the remaining workflow tasks.', 'lead_closed_workflow_stopped');
       if (outcome.kind === 'bad_template') return fail(reply, 500, 'Workflow template is not available.', 'workflow_template_missing');
       noStore(reply);
