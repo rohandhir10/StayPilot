@@ -24,8 +24,6 @@ CREATE TABLE IF NOT EXISTS sp_action_tasks (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (workspace_id, task_key)
 );
-ALTER TABLE sp_action_tasks ADD COLUMN IF NOT EXISTS completion_note TEXT NOT NULL DEFAULT '';
-
 CREATE INDEX IF NOT EXISTS sp_action_tasks_queue_idx
   ON sp_action_tasks(workspace_id, status, due_at ASC NULLS LAST, created_at DESC);
 CREATE INDEX IF NOT EXISTS sp_action_tasks_lead_idx
