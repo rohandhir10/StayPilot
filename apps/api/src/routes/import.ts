@@ -88,7 +88,7 @@ function isValidIdempotencyKey(value: unknown): value is string {
   return typeof value === 'string' &&
     value.length >= 8 &&
     value.length <= 200 &&
-    !/[\\r\\n\\u0000]/.test(value);
+    !/[\r\n\u0000]/.test(value);
 }
 
 function leadProjectionSql() {
