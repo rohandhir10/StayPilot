@@ -49,7 +49,7 @@ All paths include `/api`. Private endpoints require `Authorization: Bearer <Cler
 | GET | `/api/action-centre/tasks?status=open` | Clerk + active member | List workspace-scoped tasks, source evidence, and verified connection status |
 | POST | `/api/action-centre/refresh` | Owner/admin/sales | Scan active CRM records and the latest inbound messages in open conversations; idempotently create evidence-linked action suggestions |
 | POST | `/api/action-centre/tasks` | Owner/admin/sales | Create a manual action task, optionally linked to a verified inquiry |
-| POST | `/api/action-centre/tasks/:id/status` | Owner/admin/sales | Complete, dismiss, or reopen a task with an audit entry |
+| POST | `/api/action-centre/tasks/:id/status` | Owner/admin/sales | Complete (with required completion evidence), dismiss, or reopen a task with an audit entry |
 
 Conversation-derived tasks currently use transparent rule-based phrase matching, not an LLM. They remain suggestions and include a source excerpt and confidence label. Completion records a user's action; it does not send a message, verify a rate, confirm inventory, or secure a booking. Gmail/Outlook messages can contribute only after a real provider connector has ingested them.
 
