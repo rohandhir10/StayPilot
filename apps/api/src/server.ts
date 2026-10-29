@@ -73,10 +73,18 @@ app.addHook('onSend', async (request, reply, payload) => {
 
 app.setNotFoundHandler((_request, reply) => reply.code(404).send({ error: 'Endpoint not found.', code: 'not_found' }));
 app.setErrorHandler((error, request, reply) => {
-  const status = Number.isInteger(error.statusCode) && error.statusCode! >= 400 && error.statusCode! < 600 ? error.statusCode! : 500;
+  // Fastify's current types expose this value as unknown; narrow it before
+  // consulting status/code so unexpected thrown values cannot break handling.
+  const details = error && typeof error === 'object'
+    ? error as { statusCode?: unknown; code?: unknown }
+    : {};
+  const candidateStatus = details.statusCode;
+  const status = typeof candidateStatus === 'number' && Number.isInteger(candidateStatus)
+    && candidateStatus >= 400 && candidateStatus < 600 ? candidateStatus : 500;
   if (status >= 500) {
     // Do not log the request body or raw webhook/signature values. Keep a request ID for correlation.
-    request.log.error({ requestId: request.id, errorCode: (error as NodeJS.ErrnoException).code || 'internal_error' }, 'request failed');
+    const errorCode = typeof details.code === 'string' ? details.code : 'internal_error';
+    request.log.error({ requestId: request.id, errorCode }, 'request failed');
     return reply.code(500).send({ error: 'An unexpected error occurred.', code: 'internal_error', request_id: request.id });
   }
   const code = status === 413 ? 'request_too_large' : status === 415 ? 'unsupported_media_type' : 'invalid_request';
