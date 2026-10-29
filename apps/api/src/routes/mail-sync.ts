@@ -28,7 +28,7 @@ type NormalizedMessage = {
   bodyText: string; providerCreatedAt: string | null; metadata: Record<string, unknown>;
 };
 
-class MailSyncError extends Error {
+export class MailSyncError extends Error {
   constructor(public readonly code: string, public readonly statusCode = 502, message = 'Mailbox sync failed.') {
     super(message); this.name = 'MailSyncError';
   }
