@@ -4,7 +4,7 @@ Railway supports a private PostgreSQL service and a separate application service
 
 ## 1. Create/locate the correct project
 
-Use the Railway project connected to the repository that will contain this backend. The connected Railway account available during preparation did not contain a project explicitly named StayPilot, so no new service or database was created here.
+The connected Railway project is named `endearing-expression` and contains a StayPilot API service and a PostgreSQL service. The API service is connected to `rohandhir10/StayPilot` on `audit/fix-hardening` with root directory `apps/api`. A Railway service domain is provisioned for the API. These resources still need a successful API deployment and authenticated end-to-end verification.
 
 ## 2. PostgreSQL service
 
