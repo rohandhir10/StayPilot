@@ -12,7 +12,7 @@ type Provider = 'google' | 'microsoft';
 type ChannelKey = 'email_gmail' | 'email_outlook';
 type JsonRecord = Record<string, any>;
 type ProviderConfig = {
-  provider: Provider; channelKey: ChannelKey; clientId?: string; clientSecret?: string;
+  provider: Provider; channelKey: ChannelKey; clientId: string | undefined; clientSecret: string | undefined;
   authorizationEndpoint: string; tokenEndpoint: string; scopes: string[];
 };
 
@@ -142,7 +142,7 @@ async function finishOAuth(provider: Provider, stateValue: string, code: string)
   const tokens = await providerJson(config.tokenEndpoint, {
     method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' }, body
   });
-  const grantedScopes = asString(tokens.scope).split(/\\s+/).filter(Boolean).map(scope => scope.toLowerCase());
+  const grantedScopes = asString(tokens.scope).split(/\s+/).filter(Boolean).map(scope => scope.toLowerCase());
   const requiredMailScope = provider === 'google' ? 'https://www.googleapis.com/auth/gmail.readonly' : 'mail.read';
   if (grantedScopes.length && !grantedScopes.includes(requiredMailScope)) throw new OAuthError('mail_read_scope_missing', 403, 'Read-only mailbox permission was not granted. No mailbox was connected.');
   const accessToken = asString(tokens.access_token), refreshToken = asString(tokens.refresh_token), expiresIn = Number(tokens.expires_in);
