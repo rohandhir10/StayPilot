@@ -19,6 +19,8 @@ const schema = z.object({
   DATABASE_POOL_MAX: integerFromEnv(10, 1, 50),
   DATABASE_SSL: booleanValue.default(false),
   DATABASE_SSL_REJECT_UNAUTHORIZED: booleanValue.default(true),
+  DATABASE_SSL_CA: z.preprocess(value => value === '' ? undefined : value, z.string().min(1).optional()),
+  DATABASE_SSL_SERVERNAME: z.preprocess(value => value === '' ? undefined : value, z.string().min(1).optional()),
   FIREBASE_PROJECT_ID: z.preprocess(value => value === '' ? undefined : value, z.string().min(1).optional()),
   FIREBASE_SERVICE_ACCOUNT_JSON: z.preprocess(value => value === '' ? undefined : value, z.string().min(1).optional()),
   OWNER_FIREBASE_UID: z.preprocess(value => value === '' ? undefined : value, z.string().min(1).max(128).optional()),
@@ -68,7 +70,11 @@ export const env = Object.freeze({
   host: parsed.data.HOST,
   databaseUrl: parsed.data.DATABASE_URL,
   databasePoolMax: parsed.data.DATABASE_POOL_MAX,
-  databaseSsl: parsed.data.DATABASE_SSL ? { rejectUnauthorized: parsed.data.DATABASE_SSL_REJECT_UNAUTHORIZED } : false,
+  databaseSsl: parsed.data.DATABASE_SSL ? {
+    rejectUnauthorized: parsed.data.DATABASE_SSL_REJECT_UNAUTHORIZED,
+    ...(parsed.data.DATABASE_SSL_CA ? { ca: parsed.data.DATABASE_SSL_CA } : {}),
+    ...(parsed.data.DATABASE_SSL_SERVERNAME ? { servername: parsed.data.DATABASE_SSL_SERVERNAME } : {})
+  } : false,
   firebaseProjectId: parsed.data.FIREBASE_PROJECT_ID,
   firebaseServiceAccountJson: parsed.data.FIREBASE_SERVICE_ACCOUNT_JSON,
   ownerFirebaseUid: parsed.data.OWNER_FIREBASE_UID,
