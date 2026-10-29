@@ -227,6 +227,10 @@ export function renderSalesWorkflow(box, { leads, api, workspaceSession, isPrevi
     const lead = leads.find(item => item.id === selectedId);
     if (!lead) return;
     if (action.dataset.wfAction === "copy-draft") {
+      if (["Confirmed", "Lost"].includes(lead.status)) {
+        toast("This inquiry is marked closed; no sales follow-up draft can be copied.", true);
+        return;
+      }
       const checkbox = $("#wf-reviewed", box);
       if (!checkbox?.checked) {
         toast("Review the contact, property, dates / guest count and warnings, then tick the approval checkbox.", true);
