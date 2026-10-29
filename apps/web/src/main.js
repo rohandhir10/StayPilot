@@ -96,7 +96,21 @@ const channelCatalog=[
 {name:"Other messages",key:"other",detail:"Source-labelled internal context",priority:"P3",setup:"Use internal notes or define a source-specific integration before automating it."}
 ];
 const channelTitles=Object.fromEntries(channelCatalog.map(c=>[c.key,c.name]));
-const channelIcons={whatsapp:"W",email_gmail:"✉",email_outlook:"✉",phone:"☎",partner:"P",website:"⌂",instagram:"◎",facebook:"f",booking_com:"B",expedia:"E",other_otas:"↗",spreadsheet:"▤",other:"+"};
+const companyLogoCatalog={
+  whatsapp:{alt:"WhatsApp",src:"https://cdn.simpleicons.org/whatsapp/25D366",className:"brand-whatsapp"},
+  email_gmail:{alt:"Gmail",src:"https://cdn.simpleicons.org/gmail/EA4335",className:"brand-gmail"},
+  email_outlook:{alt:"Microsoft Outlook",src:"https://cdn.simpleicons.org/microsoftoutlook/0078D4",className:"brand-outlook"},
+  instagram:{alt:"Instagram",src:"https://cdn.simpleicons.org/instagram/E4405F",className:"brand-instagram"},
+  facebook:{alt:"Facebook Messenger",src:"https://cdn.simpleicons.org/messenger/0866FF",className:"brand-messenger"},
+  booking_com:{alt:"Booking.com",src:"https://cdn.simpleicons.org/bookingdotcom/003580",className:"brand-booking"},
+  expedia:{alt:"Expedia",src:"https://cdn.simpleicons.org/expedia/191E3B",className:"brand-expedia"}
+};
+function companyLogoMarkup(key){
+ const brand=companyLogoCatalog[key];
+ if(!brand)return '<span class="integration-generic-icon" aria-hidden="true">'+esc(({phone:"☎",partner:"P",website:"⌂",other_otas:"↗",spreadsheet:"▤",other:"+"})[key]||"•")+'</span>';
+ const initial=brand.alt.charAt(0);
+ return '<img class="integration-company-logo '+brand.className+'" src="'+brand.src+'" alt="'+brand.alt+' logo" width="28" height="28" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),{className:\'integration-generic-icon\',textContent:'+JSON.stringify(initial)+'}))">';
+}
 function timeLabel(value){if(!value)return"—";const d=new Date(value);return Number.isNaN(d.getTime())?"—":d.toLocaleString("en-IN",{day:"numeric",month:"short",hour:"numeric",minute:"2-digit"});}
 function parseCsvRows(text){
  if(typeof text!=="string"||text.length>1000000)throw new Error("CSV file must be smaller than 1 MB.");
@@ -204,7 +218,7 @@ async function renderChannelWorkspace(view){
    $("#integration-grid").innerHTML=channelCatalog.map(c=>{
     const state=byKey.get(c.key)||{status:"not_connected",connection_mode:"manual",connected:false,last_error_code:null,last_synced_at:null,last_webhook_at:null};
     const status=state.status==="inbound_active"?"Inbound active":state.status==="connected"?"Connected":state.status==="pending"?"Pending":state.status==="error"?"Needs attention":state.status==="disabled"?"Disabled":"Not connected";
-    return '<article class="integration-card"><div class="integration-card-top"><span class="integration-icon">'+esc(channelIcons[c.key]||"•")+'</span><span class="priority-tag '+c.priority.toLowerCase()+'">'+c.priority+'</span></div><h3>'+esc(c.name)+'</h3><p>'+esc(c.detail)+'</p><div class="integration-status"><i></i><span>'+esc(status)+'</span></div><div class="integration-extra"><small>Mode: '+esc(state.connection_mode||"manual")+'</small><small>Last inbound: '+esc(timeLabel(state.last_webhook_at))+'</small><small>Last sync: '+esc(timeLabel(state.last_synced_at))+'</small>'+(state.last_error_code?'<small class="integration-error">Status code: '+esc(state.last_error_code)+'</small>':'')+'</div><details><summary>Setup requirements</summary><p>'+esc(c.setup)+'</p></details></article>';
+    return '<article class="integration-card"><div class="integration-card-top"><span class="integration-icon '+(companyLogoCatalog[c.key]?.className||"integration-generic")+'">'+companyLogoMarkup(c.key)+'</span><span class="priority-tag '+c.priority.toLowerCase()+'">'+c.priority+'</span></div><h3>'+esc(c.name)+'</h3><p>'+esc(c.detail)+'</p><div class="integration-status"><i></i><span>'+esc(status)+'</span></div><div class="integration-extra"><small>Mode: '+esc(state.connection_mode||"manual")+'</small><small>Last inbound: '+esc(timeLabel(state.last_webhook_at))+'</small><small>Last sync: '+esc(timeLabel(state.last_synced_at))+'</small>'+(state.last_error_code?'<small class="integration-error">Status code: '+esc(state.last_error_code)+'</small>':'')+'</div><details><summary>Setup requirements</summary><p>'+esc(c.setup)+'</p></details></article>';
    }).join("");
   };
   const refresh=async()=>{
