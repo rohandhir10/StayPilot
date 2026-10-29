@@ -19,11 +19,15 @@ import { pool } from '../src/db.js';
 import { registerWorkspaceRoutes } from '../src/routes/workspace.js';
 import { registerLeadRoutes } from '../src/routes/leads.js';
 import { registerIntegrationRoutes } from '../src/routes/integrations.js';
+import { registerChannelRoutes } from '../src/routes/channels.js';
 import { registerPartnerRoutes } from '../src/routes/partner.js';
 
 const app = Fastify();
 const fixture = randomUUID().replaceAll('-', '').slice(0, 12);
 let workspaceId = '';
+let channelTestWorkspaceId = '';
+let channelTestUserId = '';
+let channelTestConnectionId = '';
 const users: Record<string, { id: string; email: string; role: string; active: boolean }> = {};
 let lifecycleKeyId = '';
 let lifecycleSecret = '';
@@ -61,15 +65,35 @@ describe('real membership and role checks (PostgreSQL integration; Clerk identit
         [workspaceId, id, email, `Auth ${def.key}`, def.role, def.active]
       );
     }
+    const channelWorkspace = await pool.query<{ id: string }>(
+      'INSERT INTO workspaces (slug,name) VALUES ($1,$2) RETURNING id',
+      [`channel-test-${fixture}`, `Channel Setup Test ${fixture}`]
+    );
+    channelTestWorkspaceId = channelWorkspace.rows[0].id;
+    channelTestUserId = `user_channel_test_${fixture}`;
+    await pool.query(
+      `INSERT INTO workspace_members (workspace_id,user_id,email,display_name,role,is_active)
+       VALUES ($1,$2,$3,'Channel Setup Test Owner','owner',true)`,
+      [channelTestWorkspaceId, channelTestUserId, `channel-owner-${fixture}@example.test`]
+    );
+    const channelConnection = await pool.query<{ id: string }>(
+      `INSERT INTO sp_channel_connections (workspace_id,channel_key,provider,display_name,connection_mode,status)
+       VALUES ($1,'whatsapp','meta','WhatsApp Setup Test','webhook','not_connected') RETURNING id`,
+      [channelTestWorkspaceId]
+    );
+    channelTestConnectionId = channelConnection.rows[0].id;
+
     await registerWorkspaceRoutes(app);
     await registerLeadRoutes(app);
     await registerIntegrationRoutes(app);
+    await registerChannelRoutes(app);
     await registerPartnerRoutes(app);
     await app.ready();
   });
 
   afterAll(async () => {
     await app.close();
+    if (channelTestWorkspaceId) await pool.query('DELETE FROM workspaces WHERE id=$1', [channelTestWorkspaceId]);
     if (lifecycleKeyId) {
       await pool.query('DELETE FROM sp_partner_requests WHERE api_key_id=$1', [lifecycleKeyId]);
     }
@@ -110,6 +134,47 @@ describe('real membership and role checks (PostgreSQL integration; Clerk identit
     expect(ownerPromote.json().delivery).toBe('not_sent');
   });
 
+  it('lets an owner configure a Meta account mapping and records setup as pending', async () => {
+    // Exercise this route against an isolated workspace so it cannot interfere with webhook fixtures.
+    const originalWorkspaceId = workspaceId;
+    workspaceId = channelTestWorkspaceId;
+    try {
+      const configured = await asUser(channelTestUserId, {
+        method: 'PUT', url: '/api/channels/whatsapp/meta-account',
+        payload: { external_account_id: `phone-${fixture}`, account_label: `Test Phone ${fixture}` }
+      });
+      expect(configured.statusCode).toBe(200);
+      expect(configured.json().connection).toMatchObject({
+        channel_key: 'whatsapp', provider: 'meta', status: 'pending',
+        connection_mode: 'webhook', external_account_id: `phone-${fixture}`,
+        account_label: `Test Phone ${fixture}`, credentialsReturned: false, liveDataConfirmed: false
+      });
+
+      const status = await asUser(channelTestUserId, { method: 'GET', url: '/api/channels/status' });
+      expect(status.statusCode).toBe(200);
+      expect(status.json().connections.some((connection: { channel_key: string; external_account_id: string }) =>
+        connection.channel_key === 'whatsapp' && connection.external_account_id === `phone-${fixture}`
+      )).toBe(true);
+
+      const invalid = await asUser(channelTestUserId, {
+        method: 'PUT', url: '/api/channels/gmail/meta-account',
+        payload: { external_account_id: '123456' }
+      });
+      expect(invalid.statusCode).toBe(400);
+      expect(invalid.json().code).toBe('invalid_meta_channel');
+    } finally {
+      workspaceId = originalWorkspaceId;
+    }
+  });
+
+  it('denies viewer access to provider account configuration', async () => {
+    const denied = await asUser(users.viewer.id, {
+      method: 'PUT', url: '/api/channels/whatsapp/meta-account',
+      payload: { external_account_id: '123456' }
+    });
+    expect(denied.statusCode).toBe(403);
+    expect(denied.json().code).toBe('insufficient_role');
+  });
   it('tests partner key creation, one-time secret handling, inquiry intake and revocation end to end', async () => {
     const createdKey = await asUser(users.owner.id, { method: 'POST', url: '/api/integrations/keys', payload: { name: `Lifecycle ${fixture}` } });
     expect(createdKey.statusCode).toBe(201);

@@ -111,6 +111,10 @@ export const messageQuerySchema = z.object({
   cursor: z.string().min(1).max(512).optional()
 });
 
+export const metaAccountMappingSchema = z.object({
+  external_account_id: z.string().trim().min(1).max(255).regex(/^[A-Za-z0-9._:-]+$/),
+  account_label: z.string().trim().min(1).max(160).optional()
+}).strict();
 export const noteSchema = z.object({
   conversation_id: z.string().uuid(),
   body_text: z.string().trim().min(1).max(5000)

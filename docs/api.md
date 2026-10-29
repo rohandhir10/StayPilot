@@ -41,6 +41,7 @@ All paths include `/api`. Private endpoints require `Authorization: Bearer <Cler
 | POST | `/api/inbox/messages` | Owner/admin/sales | Create an internal note; never sends an external message |
 | POST | `/api/inbox/link` | Owner/admin/sales | Link/unlink a conversation and workspace inquiry; human action is required |
 | GET | `/api/channels/status` | Clerk + active member | Channel state, last sync/webhook, stable error codes only |
+| PUT | `/api/channels/:channelKey/meta-account` | Owner/admin | Configure a Meta account ID for inbound webhook mapping; does not store provider credentials or prove provider-side verification |
 | POST | `/api/integrations/sync` | Owner/admin/sales | Intentionally returns `501` until actual mailbox connectors exist |
 
 ## Integrations / public intake
