@@ -77,6 +77,11 @@ function isClosedLead(status: unknown): status is 'Confirmed' | 'Lost' {
   return status === 'Confirmed' || status === 'Lost';
 }
 
+export function isWorkflowTaskDue(scheduledAt: string | Date, now: number = Date.now()): boolean {
+  const timestamp = scheduledAt instanceof Date ? scheduledAt.getTime() : Date.parse(scheduledAt);
+  return Number.isFinite(timestamp) && timestamp <= now;
+}
+
 function errorCode(error: unknown): string | undefined {
   if (!error || typeof error !== 'object' || !('code' in error)) return undefined;
   return typeof (error as { code?: unknown }).code === 'string' ? (error as { code: string }).code : undefined;
@@ -289,8 +294,7 @@ export async function registerWorkflowRoutes(app: FastifyInstance): Promise<void
           return { kind: 'lead_closed' as const };
         }
 
-        const scheduledTime = new Date(row.task_scheduled_at).getTime();
-        if (!Number.isFinite(scheduledTime) || scheduledTime > Date.now()) {
+        if (!isWorkflowTaskDue(row.task_scheduled_at)) {
           return { kind: 'task_not_due' as const };
         }
 
