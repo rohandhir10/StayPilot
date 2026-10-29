@@ -57,7 +57,7 @@ async function buildCandidates(member: WorkspaceMember): Promise<Candidate[]> {
   for (const lead of leadResult.rows) {
     const label = lead.company_name || lead.client_name || 'this inquiry';
     const owner = lead.assigned_to?.trim() || 'Unassigned';
-    const next = lead.next_follow_up ? new Date(lead.next_follow_up) : null;
+    const next = lead.next_follow_up ? (lead.next_follow_up instanceof Date ? lead.next_follow_up : new Date(lead.next_follow_up)) : null;
     if (next && !Number.isNaN(next.getTime()) && next.getTime() <= now + 24 * 60 * 60 * 1000) {
       const overdue = next.getTime() < now;
       candidates.push({
@@ -97,7 +97,7 @@ async function buildCandidates(member: WorkspaceMember): Promise<Candidate[]> {
         sourceMessageId: null, evidenceText: 'CRM check-in and check-out dates are blank.', evidenceChannel: 'crm', confidence: 'high'
       });
     }
-    if (lead.status === 'Proposal sent' && !next && now - new Date(lead.updated_at).getTime() >= 3 * 86400000) {
+    const lastUpdated = lead.updated_at instanceof Date ? lead.updated_at : new Date(lead.updated_at);\n    if (lead.status === 'Proposal sent' && !next && now - lastUpdated.getTime() >= 3 * 86400000) {
       candidates.push({
         taskKey: `lead:${lead.id}:proposal-stale`, sourceType: 'crm_rule', category: 'follow_up',
         title: 'Check on the outstanding proposal · ' + label,
@@ -206,7 +206,7 @@ export async function registerActionCentreRoutes(app: FastifyInstance): Promise<
       const tasks = await pool.query(
         `SELECT t.id, t.task_key, t.source_type, t.category, t.title, t.description, t.priority, t.status,
                 t.assigned_to, t.due_at, t.lead_id, t.conversation_id, t.source_message_id,
-                t.evidence_text, t.evidence_channel, t.confidence, t.created_at, t.updated_at, t.completed_at,
+                t.evidence_text, t.evidence_channel, t.confidence, t.completion_note, t.created_at, t.updated_at, t.completed_at,
                 l.client_name, l.company_name, l.property_name, l.status AS lead_status,
                 c.title AS conversation_title, c.participant_display, c.channel_key AS conversation_channel
          FROM sp_action_tasks t
@@ -298,19 +298,23 @@ export async function registerActionCentreRoutes(app: FastifyInstance): Promise<
     const id = (request.params as { id?: string }).id || '';
     const body = request.body && typeof request.body === 'object' && !Array.isArray(request.body) ? request.body as Record<string, unknown> : {};
     const status = body.status;
+    const completionNote = safeText(body.completion_note ?? '', 500) || '';
     if (!isUuid(id)) return fail(reply, 400, 'A valid task ID is required.', 'invalid_task_id');
     if (!['open', 'completed', 'dismissed'].includes(String(status))) return fail(reply, 400, 'Task status must be open, completed or dismissed.', 'invalid_task_status');
+    if (status === 'completed' && completionNote.trim().length < 5) return fail(reply, 400, 'Record what verifies completion before marking this action done.', 'completion_evidence_required');
     try {
       const updated = await inTransaction(async client => {
         const existing = await client.query('SELECT id, status FROM sp_action_tasks WHERE id=$1 AND workspace_id=$2 FOR UPDATE', [id, member.workspace_id]);
         if (!existing.rows.length) return false;
         await client.query(
           `UPDATE sp_action_tasks SET status=$1, completed_at=CASE WHEN $1='completed' THEN now() ELSE NULL END,
-             completed_by_user_id=CASE WHEN $1='completed' THEN $2 ELSE NULL END, updated_at=now()
-           WHERE id=$3 AND workspace_id=$4`,
-          [status, member.user_id, id, member.workspace_id]
+             completed_by_user_id=CASE WHEN $1='completed' THEN $2 ELSE NULL END,
+             completion_note=CASE WHEN $1='completed' THEN $3 WHEN $1='open' THEN '' ELSE completion_note END,
+             updated_at=now()
+           WHERE id=$4 AND workspace_id=$5`,
+          [status, member.user_id, completionNote.trim(), id, member.workspace_id]
         );
-        await auditEvent(client, { workspaceId: member.workspace_id, actor: member, action: 'action_task.status_changed', entityType: 'action_task', entityId: id, metadata: { from: existing.rows[0].status, to: status } });
+        await auditEvent(client, { workspaceId: member.workspace_id, actor: member, action: 'action_task.status_changed', entityType: 'action_task', entityId: id, metadata: { from: existing.rows[0].status, to: status, completion_evidence_provided: status === 'completed' } });
         return true;
       });
       if (!updated) return fail(reply, 404, 'Task not found.', 'action_task_not_found');
