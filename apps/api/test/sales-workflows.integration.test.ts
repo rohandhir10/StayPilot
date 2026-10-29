@@ -71,8 +71,10 @@ async function startSequence(leadId: string, key: 'corporate' | 'wedding' | 'mic
 
 describe('persistent hotel-sales workflows (PostgreSQL integration)', () => {
   beforeAll(async () => {
-    const workspace = await pool.query("SELECT id FROM workspaces WHERE slug='default' LIMIT 1");
-    if (!workspace.rows[0]) throw new Error('Default workspace is missing. CI migrations must run first.');
+    const workspace = await pool.query(
+      'INSERT INTO workspaces (slug, name) VALUES ($1, $2) RETURNING id',
+      [`sales-workflow-test-${fixture}`, `Sales Workflow Test ${fixture}`]
+    );
     workspaceId = workspace.rows[0].id;
     member.workspace_id = workspaceId;
     mocks.requireWorkspaceMember.mockImplementation(async () => member);
@@ -91,6 +93,7 @@ describe('persistent hotel-sales workflows (PostgreSQL integration)', () => {
       );
       await pool.query('DELETE FROM leads WHERE workspace_id=$1 AND id = ANY($2::uuid[])', [workspaceId, leadIds]);
     }
+    if (workspaceId) await pool.query('DELETE FROM workspaces WHERE id=$1', [workspaceId]);
   });
 
   it('persists a sequence, advances a task, and stops pending work when the lead closes', async () => {
