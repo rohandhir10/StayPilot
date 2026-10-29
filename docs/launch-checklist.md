@@ -4,12 +4,12 @@
 
 - [ ] Confirm GitHub repository visibility is intentional; the current repository setting is public. Do not store real credentials or customer data in source control.
 - [ ] Configure Railway Root Directory as `apps/api`, create/attach private PostgreSQL, set required variables, set pre-deploy migration and `/api/health/ready`, then verify the API is online before testing the frontend.
-- [ ] Configure Vercel Root Directory as `apps/web`; set `VITE_API_BASE_URL` and `VITE_CLERK_PUBLISHABLE_KEY`, then redeploy.
+- [ ] Configure Vercel Root Directory as `apps/web`; set `VITE_API_BASE_URL` and the four `VITE_FIREBASE_*` Web App settings, then redeploy.
 
 - [ ] Verify the ported reference UI on desktop/mobile, including sign-in, overview, inquiry create/update, duplicate review, inbox notes/linking, channels and CSV/JSON import. Never put backend secrets in frontend code.
 - [ ] Generate and commit both `apps/api/package-lock.json` and `apps/web/package-lock.json` (current CI artifacts are temporary), then use `npm ci` in CI/build.
 - [ ] Keep GitHub Actions green for TypeScript typecheck, PostgreSQL integration tests and build; latest verified run passed 9 test files / 50 tests on the audit branch, but this is not a live production smoke test.
-- [ ] Provision Clerk, create the initial owner, set `OWNER_CLERK_USER_ID`, and confirm an uninvited account gets `403` while the owner gets access.
+- [ ] Provision Firebase Google sign-in, store the Admin service-account JSON only in Railway, set `FIREBASE_PROJECT_ID` and `OWNER_FIREBASE_UID`, then confirm an uninvited account gets `403` while the owner gets access.
 - [ ] Provision Railway PostgreSQL; set `DATABASE_SSL=true` and keep certificate validation enabled. Apply migrations via Railway pre-deploy command.
 - [ ] Set exact Vercel production origin in Railway `WEB_ORIGINS`; verify expected Vercel preview behavior explicitly.
 - [ ] Keep Fastify `trustProxy` disabled. Verify public ingress overwrites `X-Real-IP`, rate limits bucket by that validated header, and no untrusted workload can reach the API through Railway private networking.
@@ -24,7 +24,7 @@
 
 - Workspace-scoped lead CRUD and activities.
 - Input schemas, explicit status/field allow-lists and database constraints.
-- Email/passwordless/session validation delegated to Clerk; workspace role check on every private route.
+- Google sign-in and session validation delegated to Firebase Authentication; workspace role check on every private route.
 - Owner/admin/sales/viewer roles and invitation grants; admins cannot invite another admin unless they are the owner.
 - One-time partner API key generation, SHA-256 hash at rest, revoke and last-used timestamp.
 - Server-to-server partner inquiry creation with request-size limit, per-key database rate limiting and `Idempotency-Key` conflict detection.
@@ -41,13 +41,13 @@
 - **No external replies yet.** The inbox can save internal notes only. The existence of `sp_outbound_requests` is not a sender; no WhatsApp/email/social sending endpoint is enabled.
 - **No OTA connector yet.** Booking.com, Expedia and channel-manager access needs approved partner/account access plus provider-specific adapters.
 - **Meta requires approval and configuration.** Webhook intake handles selected inbound message payloads; it ignores status/delivery events and does not download media/attachments. Business verification, app permissions and subscribed topics remain provider-side work.
-- **No email invite delivery.** Team invites create workspace grants, but email delivery/Clerk invitation creation is not implemented.
+- **No email invite delivery.** Team invites create workspace grants, but email delivery/provider invitation creation is not implemented.
 - **Single default workspace.** Schema records carry `workspace_id`, but multi-workspace account switching, per-hotel tenancy and operator-facing workspace selection are not implemented/tested.
 - **No confirmed booking/PMS synchronization.** An inquiry or conversation is not a reservation. Hotel inventory/pricing and live availability are outside this backend.
 - **No automated data deletion for lead/message content.** Audit events are retained until the owner approves a retention policy. The scheduled cleanup removes only expired rate-limit buckets and old webhook event metadata (processed/ignored after 90 days; failed after 30 days). This is not a compliance certification.
 - **Rate limiting is layered, not a DDoS provider.** The Fastify per-IP limiter is per process/instance; public email/IP and partner-key limits are database-backed. Production proxy trust must be configured correctly, and provider-level/network rate protection may still be needed.
 - **Duplicate detection is advisory.** The import/inquiry overlap logic does not auto-merge or guarantee detection of all duplicates; concurrent submissions can still become separate inquiries.
-- **Verification boundary.** Latest audit-branch CI run passed typecheck, 9 test files / 50 tests against CI PostgreSQL, and build. The package lockfile is only a short-lived CI artifact, not committed. Live API, browser, production Clerk, Turnstile and Meta workflows remain unverified.
+- **Verification boundary.** Latest audit-branch CI run passed typecheck, 9 test files / 50 tests against CI PostgreSQL, and build. The package lockfile is only a short-lived CI artifact, not committed. Live API, browser, production Firebase Auth, Turnstile and Meta workflows remain unverified.
 
 ## Retention and privacy
 
@@ -57,6 +57,6 @@ Messages and lead contact details are retained in PostgreSQL until deliberately 
 
 1. Revoke a suspected leaked partner key in StayPilot; rotate the source-side secret and examine audit events.
 2. Rotate Meta app/webhook secrets in the provider account and Railway Variables, then re-verify the webhook.
-3. Rotate Clerk keys if a backend secret leaks; review active sessions and environment history.
+3. Rotate Firebase service-account keys if a backend secret leaks; review environment history and revoke affected sessions.
 4. Preserve relevant logs without copying customer content or secrets into tickets.
 5. Restore the database only from a verified backup and keep the affected service blocked until credentials and access checks are revalidated.
