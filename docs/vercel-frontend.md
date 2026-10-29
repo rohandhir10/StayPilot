@@ -1,70 +1,30 @@
-# Vercel frontend integration
+# Vercel frontend setup
 
-The backend does not replace or duplicate the frontend. Connect the existing frontend repository to Vercel and use the Railway service's HTTPS origin as its API origin. A Vercel project/repository named StayPilot was not visible in the connected account used during preparation, so this document is a setup contract rather than a claim that the frontend has been wired.
+The reference dashboard is in `apps/web/` and is built with Vite. Set the Vercel project root directory to **`apps/web`**; don't point Vercel at the repository root or `apps/api`.
 
-## Vercel environment variables
+## Required Vercel environment variables
 
-| Variable | Environment | Notes |
+| Variable | Example | Notes |
 |---|---|---|
-| `VITE_API_BASE_URL` | Production/Preview/Development | Railway API origin only, e.g. `https://<your-api-service>.up.railway.app` (no trailing slash and no `/api` suffix) |
-| `VITE_CLERK_PUBLISHABLE_KEY` | Production/Preview/Development | Public Clerk publishable key (`pk_live_…` in production) |
+| `VITE_API_BASE_URL` | `https://your-railway-api-domain.example` | API origin; the client adds `/api` if omitted. Do not include an endpoint path other than the optional `/api` suffix. |
+| `VITE_CLERK_PUBLISHABLE_KEY` | `pk_live_…` | Public browser key from the Clerk Dashboard. Never add the Clerk secret key to Vercel frontend variables. |
 
-Never put `CLERK_SECRET_KEY`, `DATABASE_URL`, `META_APP_SECRET`, `META_WEBHOOK_VERIFY_TOKEN`, `TURNSTILE_SECRET_KEY`, or any partner API secret into Vercel frontend variables prefixed with `VITE_`, `NEXT_PUBLIC_`, or any other client-exposed namespace.
+Add variables to Development/Preview/Production environments as appropriate, then redeploy after changing them. For local development, copy `.env.example` to `.env` and use the local API origin.
 
-## Fetch contract
+## Build and routes
 
-Private endpoints require a Clerk session bearer token. A plain `fetch('/api/leads/list')` call is not sufficient when the API lives on Railway. For React with Clerk, a single shared client helper can look like this:
+The project uses `npm run build` and outputs `dist/`. Vite builds three entry pages: the dashboard (`/`), Clerk sign-in (`/login`), and the public, Turnstile-protected inquiry form (`/inquiry`). Vercel rewrites these friendly paths to their HTML files.
 
-```ts
-const API_ORIGIN = (import.meta.env.VITE_API_BASE_URL as string).replace(/\/$/, '');
+## API and CORS
 
-type TokenProvider = () => Promise<string | null>;
+The frontend obtains a Clerk session token and sends it in the `Authorization: Bearer` header for private API requests. The API still performs workspace membership and role checks; a signed-in Clerk user does not automatically gain CRM access.
 
-export async function stayPilotFetch<T>(
-  getToken: TokenProvider,
-  path: string,
-  init: RequestInit = {},
-): Promise<T> {
-  const token = await getToken();
-  if (!token) throw new Error('Sign in to StayPilot first.');
+Set Railway `WEB_ORIGINS` to the exact scheme + host of each approved production and test deployment, e.g. `https://sales.example.com,https://stay-pilot-git-audit-fix-hardening-example.vercel.app`. No paths, trailing slashes, wildcards or arbitrary preview domains. If a preview URL changes, approve the specific new origin deliberately.
 
-  const response = await fetch(`${API_ORIGIN}${path}`, {
-    ...init,
-    cache: 'no-store',
-    headers: {
-      Accept: 'application/json',
-      ...(init.body ? { 'Content-Type': 'application/json' } : {}),
-      Authorization: `Bearer ${token}`,
-      ...init.headers,
-    },
-  });
+## Public inquiry form
 
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const message = typeof body.error === 'string' ? body.error : `Request failed (${response.status}).`;
-    const error = new Error(message) as Error & { status?: number; code?: string; body?: unknown };
-    error.status = response.status;
-    error.code = typeof body.code === 'string' ? body.code : undefined;
-    error.body = body;
-    throw error;
-  }
-  return body as T;
-}
-```
+`/inquiry` uses `GET /api/public/form-config` and `POST /api/public/inquiry` against the same API origin. Before using it, set both the Turnstile public site key and the server-side secret in the relevant environments. The API checks consent, rate limits and Turnstile token/hostname; submissions should fail closed while the security check is missing or invalid.
 
-Example in a React component:
+## Deployment verification boundary
 
-```ts
-const { getToken } = useAuth();
-const data = await stayPilotFetch(() => getToken(), '/api/leads/list');
-```
-
-Use the *same* helper for existing UI pages and actions. Don't copy authorization logic into each page. `GET /api/public/form-config` and `POST /api/public/inquiry` are public endpoints and can use ordinary `fetch`; the public form submission still requires a valid Turnstile token and privacy-consent flag.
-
-## CORS configuration
-
-Set Railway `WEB_ORIGINS` to exact origins, e.g. `https://your-frontend.vercel.app,https://sales.example.com`. An origin consists of scheme + hostname + optional port, with no path or trailing slash. Do not use `*`. Vercel preview domains can vary by branch/commit; list the specific trusted preview origin you are testing, or use a stable preview domain you control. Do not use a broad regex that trusts arbitrary `*.vercel.app` sites.
-
-## Existing UI routes preserved
-
-The backend includes compatibility paths for the current UI's lead CRUD, `/api/session`, unified inbox, channel status, CSV import and `/api/integrations/api-keys`. But the existing frontend still needs to be updated to call the Railway API origin and attach the Clerk bearer token. The current Hatchable prototype frontend was not found in the connected GitHub account, so that edit has not been made in a Vercel repository.
+A successful Vercel static build does not confirm that the Railway API is online, CORS is correct, Clerk sessions are accepted, an invitation grants workspace access, or the Turnstile hostname is approved. Test those flows after configuring both services. External reply sending and mailbox sync remain deliberately unavailable in this release.
