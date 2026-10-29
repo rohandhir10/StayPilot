@@ -87,6 +87,27 @@ export const leadUpdateSchema = z.object({
   notes: z.string().trim().max(5000).optional()
 }).refine(value => ['status', 'assigned_to', 'next_follow_up', 'notes'].some(key => Object.hasOwn(value, key)), { message: 'No supported fields to update.' });
 
+
+export const workflowEnrollSchema = z.object({
+  lead_id: z.string().uuid(),
+  sequence_key: z.enum(['corporate', 'wedding', 'mice', 'general']),
+  confirm_duplicate_review: z.boolean().optional().default(false)
+}).strict();
+
+export const workflowQueueQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(50)
+}).strict();
+
+export const workflowTaskCompleteSchema = z.object({
+  task_id: z.string().uuid(),
+  note: z.string().trim().max(2000).optional().default('')
+}).strict();
+
+export const workflowEnrollmentActionSchema = z.object({
+  enrollment_id: z.string().uuid(),
+  action: z.enum(['pause', 'resume', 'cancel'])
+}).strict();
+
 export const inviteSchema = z.object({
   email: z.string().trim().email().max(254).transform(v => v.toLowerCase()),
   role: z.enum(['admin', 'sales', 'viewer'])
