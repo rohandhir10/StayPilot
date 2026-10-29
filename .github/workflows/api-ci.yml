@@ -26,14 +26,23 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-      # A package-lock.json is intentionally not fabricated; commit one after
-      # running npm install in a network-enabled environment, then switch this
-      # step to `npm ci` for deterministic dependency resolution.
+      # A committed lockfile is still needed for reproducible resolution.
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+      # Temporary handoff to commit the generated lockfile after verifying this resolution.
+      - name: Upload generated dependency lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: staypilot-api-lockfile
+          path: apps/api/package-lock.json
+          if-no-files-found: error
+          retention-days: 1
       - name: Typecheck
         run: npm run typecheck
       - name: Unit tests
         run: npm test
       - name: Build
         run: npm run build
+      # Run audit after correctness checks so an advisory does not hide build/test results.
+      - name: Audit dependencies
+        run: npm audit --audit-level=high

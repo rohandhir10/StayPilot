@@ -36,11 +36,37 @@ describe('request schemas', () => {
     expect(parsed.success).toBe(true);
     if (parsed.success) {
       expect(parsed.data.source).toBe('Website');
+      expect(parsed.data.status).toBe('New inquiry');
+      expect(parsed.data.assigned_to).toBe('Unassigned');
+      expect(parsed.data.estimated_value).toBe(0);
+      expect(parsed.data.next_follow_up).toBeNull();
+      expect(parsed.data.agent_name).toBe('');
+      expect(parsed.data.agent_email).toBe('');
       expect('turnstile_token' in parsed.data).toBe(false);
       expect('privacy_consent' in parsed.data).toBe(false);
     }
     expect(publicLeadSchema.safeParse({ ...input, privacy_consent: false }).success).toBe(false);
     expect(publicLeadSchema.safeParse({ ...input, turnstile_token: '' }).success).toBe(false);
+
+    // A public visitor cannot pre-confirm, assign, value, or schedule an inquiry.
+    const hostile = publicLeadSchema.safeParse({
+      ...input,
+      status: 'Confirmed',
+      assigned_to: 'Fake manager',
+      estimated_value: 999999999,
+      next_follow_up: '2026-10-30T12:00:00.000Z',
+      agent_name: 'Impersonated travel agent',
+      source: 'Travel agent'
+    });
+    expect(hostile.success).toBe(true);
+    if (hostile.success) {
+      expect(hostile.data.status).toBe('New inquiry');
+      expect(hostile.data.assigned_to).toBe('Unassigned');
+      expect(hostile.data.estimated_value).toBe(0);
+      expect(hostile.data.next_follow_up).toBeNull();
+      expect(hostile.data.agent_name).toBe('');
+      expect(hostile.data.source).toBe('Website');
+    }
   });
 
   it('rejects empty update operations', () => {

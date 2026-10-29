@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Hotel inquiry · StayPilot</title><style>
+*{box-sizing:border-box}body{margin:0;background:#f5f6f8;color:#24344b;font-family:Inter,system-ui,sans-serif;padding:24px}.wrap{width:min(720px,100%);margin:0 auto}.brand{display:flex;align-items:center;gap:10px;margin:5px 0 22px}.mark{width:36px;height:36px;border-radius:10px;background:linear-gradient(145deg,#e6c99a,#b28b52);display:grid;place-items:center;font-weight:800;color:#142238}.brand b{font-size:17px}.brand small{display:block;font-size:9px;letter-spacing:1.2px;color:#8c99a9;margin-top:3px}.card{background:#fff;border:1px solid #e5eaf0;border-radius:14px;padding:25px;box-shadow:0 12px 40px #182a4208}h1{font-size:25px;letter-spacing:-.8px;margin:0 0 7px}.intro{color:#7d899a;font-size:12px;line-height:1.65;margin:0 0 20px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.field{display:grid;gap:6px}.field label{font-size:11px;font-weight:650;color:#45556b}.field input,.field select,.field textarea{width:100%;min-width:0;border:1px solid #dce3eb;border-radius:7px;min-height:40px;padding:9px 10px;font:inherit;font-size:12px;background:white;color:#34445a}.field textarea{min-height:92px;resize:vertical}.full{grid-column:1/-1}.hp{position:absolute!important;left:-10000px!important;top:auto!important;width:1px!important;height:1px!important;overflow:hidden!important}.captcha{margin:17px 0;min-height:65px}.btn{width:100%;height:44px;border:0;border-radius:7px;background:#17283f;color:white;font-size:12px;font-weight:700;cursor:pointer}.btn:disabled{opacity:.55;cursor:wait}.msg{font-size:12px;line-height:1.65;color:#65758b;margin-top:12px}.msg.error{color:#a53d49}.msg.success{color:#327b58}.consent{display:flex;align-items:flex-start;gap:9px;margin-top:16px;font-size:11px;line-height:1.6;color:#596a80}.consent input{margin-top:2px;flex:0 0 16px}.hint{font-size:10px;line-height:1.6;color:#969fac;margin-top:16px}@media(max-width:560px){body{padding:14px}.card{padding:17px}.grid{grid-template-columns:1fr}.full{grid-column:auto}}
+.staypilot-brand-mark{font:800 19px Manrope,Inter,system-ui,sans-serif}.staypilot-brand-mark::before{content:"";display:block}</style><script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script><script>window.STAYPILOT_API_BASE_URL = "%VITE_API_BASE_URL%";</script></head>
+<body><main class="wrap"><div class="brand"><div class="mark staypilot-brand-mark" aria-hidden="true">S</div><div><b>staypilot</b><small>HOTEL INQUIRY FORM</small></div></div><section class="card"><h1>Tell us about your stay or event</h1><p class="intro">Share a few details and the hotel sales team will review your inquiry. This form securely sends your request to the hotel’s StayPilot workspace.</p><form id="form"><div class="grid">
+<div class="field"><label for="client_name">Your name *</label><input id="client_name" name="client_name" maxlength="120" required autocomplete="name"></div>
+<div class="field"><label for="client_email">Email address *</label><input id="client_email" name="client_email" type="email" maxlength="254" required autocomplete="email"></div>
+<div class="field"><label for="client_phone">Phone (optional)</label><input id="client_phone" name="client_phone" type="tel" maxlength="32" autocomplete="tel"></div>
+<div class="field"><label for="company_name">Company / organisation (optional)</label><input id="company_name" name="company_name" maxlength="160" autocomplete="organization"></div>
+<div class="field"><label for="property_name">Preferred hotel *</label><select id="property_name" name="property_name" required><option>The LaLiT New Delhi</option><option>The LaLiT Mumbai</option><option>The LaLiT Ashok Bengaluru</option><option>The LaLiT Jaipur</option></select></div>
+<div class="field"><label for="inquiry_type">Inquiry type *</label><select id="inquiry_type" name="inquiry_type" required><option>Corporate stay</option><option>Wedding / social event</option><option>MICE / conference</option><option>Leisure group</option><option>Travel trade</option><option>Other</option></select></div>
+<div class="field"><label for="check_in">Start date (optional)</label><input id="check_in" name="check_in" type="date"></div>
+<div class="field"><label for="check_out">End date (optional)</label><input id="check_out" name="check_out" type="date"></div>
+<div class="field"><label for="guests">Guests / rooms</label><input id="guests" name="guests" type="number" min="1" max="10000" step="1" value="1"></div>
+<div class="field full"><label for="notes">Requirements</label><textarea id="notes" name="notes" maxlength="5000" placeholder="Dates, event size, rooms, meeting space or other requirements"></textarea></div>
+</div>
+<div class="hp" aria-hidden="true"><label for="website">Leave this field empty</label><input id="website" name="website" tabindex="-1" autocomplete="off"></div>
+<label class="consent"><input id="privacy_consent" name="privacy_consent" type="checkbox" required> I agree that the hotel may use these details to respond to my inquiry.</label>
+<input id="form_started_at" name="form_started_at" type="hidden">
+<div class="captcha"><div id="turnstile-widget" aria-label="Security verification"></div></div>
+<button id="submit" class="btn" type="submit" disabled>Loading secure form…</button><p id="message" class="msg" role="status" aria-live="polite"></p><p class="hint">Submit only information needed to respond to your inquiry. This form does not make a confirmed reservation; the hotel must confirm availability and details separately.</p>
+</form></section></main>
+<script>
+(function(){
+"use strict";
+const apiBaseCandidate=(window.STAYPILOT_API_BASE_URL||"").trim().replace(/\/$/,"");
+const configuredApiBase=/^https?:\/\/[^/\\s]+(?:\/api)?$/i.test(apiBaseCandidate)?apiBaseCandidate:"";
+const API_BASE=configuredApiBase?(configuredApiBase.endsWith("/api")?configuredApiBase:configuredApiBase+"/api"):"/api";
+const form=document.getElementById("form"),btn=document.getElementById("submit"),msg=document.getElementById("message");
+const captchaToken={value:""};let siteKey="",formStartedAt=Date.now(),widgetId=null,ready=false;
+function say(text,kind){msg.textContent=text||"";msg.className="msg "+(kind||"");}
+async function setup(){
+document.getElementById("form_started_at").value=String(formStartedAt);
+try{const r=await fetch(API_BASE+"/public/form-config",{cache:"no-store"});const d=await r.json();if(!r.ok||!d.site_key){say("The hotel has not finished configuring the form’s security check. Please contact the hotel directly.","error");btn.textContent="Form unavailable";return;}siteKey=d.site_key;}
+catch(e){say("Could not load the secure form configuration. Please try again later.","error");btn.textContent="Form unavailable";return;}
+const waitForTurnstile=()=>{if(window.turnstile){widgetId=window.turnstile.render("#turnstile-widget",{sitekey:siteKey,callback:token=>{captchaToken.value=token;ready=true;btn.disabled=false;btn.textContent="Send inquiry securely";},"expired-callback":()=>{captchaToken.value="";ready=false;btn.disabled=true;btn.textContent="Complete security check";},"error-callback":()=>{captchaToken.value="";ready=false;btn.disabled=true;say("Security verification failed to load. Refresh the page and try again.","error");}});return;}setTimeout(waitForTurnstile,100);};
+waitForTurnstile();
+}
+form.addEventListener("submit",async e=>{
+e.preventDefault();if(!ready||!captchaToken.value){say("Complete the security check before submitting.","error");return;}
+if(!form.reportValidity())return;
+const data=Object.fromEntries(new FormData(form).entries());data.turnstile_token=captchaToken.value;
+btn.disabled=true;btn.textContent="Sending securely…";say("");
+try{const r=await fetch(API_BASE+"/public/inquiry",{method:"POST",headers:{"Content-Type":"application/json","Accept":"application/json"},body:JSON.stringify(data)});const d=await r.json().catch(()=>({}));if(!r.ok){throw new Error(d.error||"Inquiry submission failed.");}form.reset();captchaToken.value="";ready=false;formStartedAt=Date.now();document.getElementById("form_started_at").value=String(formStartedAt);if(widgetId!==null&&window.turnstile)window.turnstile.reset(widgetId);btn.disabled=true;btn.textContent="Complete security check";say("Thank you. Your inquiry has been sent to the hotel sales team for review.","success");}
+catch(error){captchaToken.value="";ready=false;if(widgetId!==null&&window.turnstile)window.turnstile.reset(widgetId);btn.disabled=true;btn.textContent="Complete security check";say(error.message||"Could not submit your inquiry. Please try again.","error");}
+});
+setup();
+})();
+</script></body></html>

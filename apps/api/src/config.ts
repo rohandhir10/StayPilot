@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isValidTrustedProxyCidr, parseTrustedProxyCidrs } from './proxy.js';
 
 const booleanValue = z.preprocess((value) => {
   if (typeof value !== 'string') return value;
@@ -30,7 +31,7 @@ const schema = z.object({
   RATE_LIMIT_PUBLIC_PER_HOUR: integerFromEnv(5, 1, 100),
   RATE_LIMIT_PARTNER_PER_MINUTE: integerFromEnv(120, 1, 10000),
   WEBHOOK_BODY_LIMIT_BYTES: integerFromEnv(1_048_576, 1024, 10_485_760),
-  TRUST_PROXY_HOPS: integerFromEnv(0, 0, 5),
+  TRUSTED_PROXY_CIDRS: z.preprocess(value => typeof value === 'string' ? parseTrustedProxyCidrs(value) : value, z.array(z.string().min(1)).default([])),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info')
 });
 
@@ -39,6 +40,10 @@ if (!parsed.success) {
   const issues = parsed.error.issues.map(issue => `${issue.path.join('.')}: ${issue.message}`).join('; ');
   // Report missing variable names and validation messages only, never values.
   throw new Error(`Invalid StayPilot API configuration: ${issues}`);
+}
+
+if (parsed.data.TRUSTED_PROXY_CIDRS.some(value => !isValidTrustedProxyCidr(value))) {
+  throw new Error('TRUSTED_PROXY_CIDRS must contain only explicit IPv4/IPv6 addresses or CIDR ranges; wildcard ranges such as /0 are not allowed.');
 }
 
 if (parsed.data.NODE_ENV === 'production') {
@@ -53,8 +58,8 @@ if (parsed.data.NODE_ENV === 'production') {
   if (!parsed.data.DATABASE_SSL) {
     throw new Error('DATABASE_SSL=true is required in production; use a database TLS connection with certificate verification enabled.');
   }
-  if (parsed.data.TRUST_PROXY_HOPS < 1) {
-    throw new Error('TRUST_PROXY_HOPS must be set to the verified Railway proxy hop count in production so IP-based limits use the real client address.');
+  if (parsed.data.TRUSTED_PROXY_CIDRS.length === 0) {
+    throw new Error('TRUSTED_PROXY_CIDRS must list the verified ingress proxy IP addresses/CIDR ranges in production; do not trust forwarded headers from every peer.');
   }
   if (!parsed.data.OWNER_CLERK_USER_ID || !parsed.data.OWNER_CLERK_USER_ID.startsWith('user_') || parsed.data.OWNER_CLERK_USER_ID.includes('REPLACE')) {
     throw new Error('OWNER_CLERK_USER_ID must be the real Clerk user ID of the intended workspace owner.');
@@ -86,6 +91,6 @@ export const env = Object.freeze({
   publicRateLimitPerHour: parsed.data.RATE_LIMIT_PUBLIC_PER_HOUR,
   partnerRateLimitPerMinute: parsed.data.RATE_LIMIT_PARTNER_PER_MINUTE,
   webhookBodyLimitBytes: parsed.data.WEBHOOK_BODY_LIMIT_BYTES,
-  trustProxyHops: parsed.data.TRUST_PROXY_HOPS,
+  trustedProxyCidrs: parsed.data.TRUSTED_PROXY_CIDRS,
   logLevel: parsed.data.LOG_LEVEL
 });

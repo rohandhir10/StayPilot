@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="theme-color" content="#101c2c">
+  <title>Sign in · StayPilot</title>
+  <link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/styles-company-logos.css">
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:radial-gradient(ellipse at 18% 0%,#e9eef6 0,transparent 55%),#f5f6f8;color:#223148;font-family:'DM Sans',Inter,system-ui,sans-serif}
+    .auth-card{width:min(460px,100%);background:#fff;border:1px solid #e4e9ef;border-radius:18px;padding:32px;box-shadow:0 22px 70px #17283f12}
+    .brand{display:flex;align-items:center;gap:12px;margin-bottom:24px}
+    .mark{width:42px;height:42px;display:grid;place-items:center;background:linear-gradient(145deg,#e6c99a,#b28b52);border-radius:12px;color:#142238;font:800 22px Manrope}
+    .brand b{font:800 20px Manrope;letter-spacing:-.8px}.brand small{display:block;font-size:9px;letter-spacing:1.4px;color:#8c99a9;margin-top:3px}
+    h1{font:700 25px Manrope;margin:0 0 8px;letter-spacing:-.6px}.intro{margin:0 0 24px;color:#7d8998;font-size:12px;line-height:1.7}
+    #google-sign-in{width:100%;min-height:46px;border:1px solid #d7dfe8;border-radius:9px;background:#fff;color:#1f3047;font:650 13px Inter,system-ui,sans-serif;cursor:pointer}#google-sign-in:disabled{opacity:.55;cursor:not-allowed}.google-sign-in-content{display:inline-flex;align-items:center;justify-content:center;gap:11px}.google-company-logo{width:20px;height:20px;object-fit:contain}#google-sign-in[hidden]{display:none}.error{display:none;background:#fff1f0;border:1px solid #f1d0cb;color:#943e35;border-radius:8px;padding:12px;font-size:12px;line-height:1.6;margin:0 0 12px}
+    .foot{font-size:10px;color:#8d99a8;line-height:1.7;margin-top:18px}.back{display:inline-block;margin-top:18px;color:#5d718c;font-size:11px;text-decoration:none}
+  </style>
+</head>
+<body>
+  <main class="auth-card">
+    <div class="brand"><div class="mark">S</div><div><b>staypilot</b><small>HOSPITALITY SALES OS</small></div></div>
+    <h1>Welcome back</h1>
+    <p class="intro">Sign in to access your team’s hotel sales workspace. New users need a verified invitation and workspace access.</p>
+    <p class="error" id="auth-error" role="alert"></p>
+    <button id="google-sign-in" type="button"><span class="google-sign-in-content"><img class="google-company-logo" src="https://cdn.simpleicons.org/google/4285F4" alt="" width="20" height="20" referrerpolicy="no-referrer">Continue with Google</span></button>
+    <p class="foot">Google authenticates your account. StayPilot separately checks workspace membership and role permissions before showing CRM data.</p>
+    <a class="back" href="/">← Back to StayPilot</a>
+  </main>
+  <script type="module" src="/src/login.js"></script>
+</body>
+</html>
