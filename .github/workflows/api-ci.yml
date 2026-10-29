@@ -63,7 +63,7 @@ jobs:
           wait "$first"
           wait "$second"
       - name: Verify migration ledger and schema version
-        run: node --input-type=module -e "import pg from 'pg'; const db=new pg.Pool({connectionString:process.env.DATABASE_URL}); const r=await db.query('SELECT name FROM schema_migrations ORDER BY name'); console.log(r.rows); if(!r.rows.some(x=>x.name==='0003_inbox_pagination_indexes.sql')) process.exitCode=1; await db.end();"
+        run: node --input-type=module -e "import pg from 'pg'; const db=new pg.Pool({connectionString:process.env.DATABASE_URL}); const r=await db.query('SELECT name FROM schema_migrations ORDER BY name'); console.log(r.rows); if(!r.rows.some(x=>x.name==='0004_import_idempotency.sql')) process.exitCode=1; await db.end();"
       - name: Typecheck
         run: npm run typecheck
       - name: Unit tests

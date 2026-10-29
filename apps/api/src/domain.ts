@@ -82,23 +82,27 @@ export async function createLeadRecord(input: LeadInsertInput & {
   });
 }
 
-export async function createLeadsBatch(input: {
+export type LeadBatchInput = {
   workspaceId: string; actor: WorkspaceMember;
   entries: Array<{ lead: LeadInput; rowNumber: number }>;
-}) {
+};
+
+export async function createLeadsBatchWithClient(client: pg.PoolClient, input: LeadBatchInput) {
   if (!input.entries.length || input.entries.length > 25) throw new Error('batch_size_invalid');
-  return await inTransaction(async client => {
-    const result = [];
-    for (const entry of input.entries) {
-      result.push(await insertLeadAndActivity(client, {
-        workspaceId: input.workspaceId,
-        actor: input.actor,
-        lead: entry.lead,
-        activityDescription: `Spreadsheet import · row ${entry.rowNumber}`
-      }));
-    }
-    return result;
-  });
+  const result = [];
+  for (const entry of input.entries) {
+    result.push(await insertLeadAndActivity(client, {
+      workspaceId: input.workspaceId,
+      actor: input.actor,
+      lead: entry.lead,
+      activityDescription: `Spreadsheet import · row ${entry.rowNumber}`
+    }));
+  }
+  return result;
+}
+
+export async function createLeadsBatch(input: LeadBatchInput) {
+  return await inTransaction(client => createLeadsBatchWithClient(client, input));
 }
 
 export async function appendActivity(input: {

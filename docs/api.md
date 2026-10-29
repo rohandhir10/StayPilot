@@ -30,7 +30,7 @@ All paths include `/api`. Private endpoints require `Authorization: Bearer <Cler
 | POST | `/api/leads/create` | Owner/admin/sales | Validate and create an inquiry + activity + audit in one transaction |
 | POST | `/api/leads/update` | Owner/admin/sales | Update allowed fields and log activity/audit |
 | GET | `/api/leads/activities?id=<uuid>` | Clerk + active member | Read recent activity after checking workspace membership |
-| POST | `/api/leads/import` | Owner/admin/sales | Preview or atomically commit 1–25 JSON rows; `mode: preview` first, then `mode: commit`; `confirm_duplicates: true` required when matches exist |
+| POST | `/api/leads/import` | Owner/admin/sales | Preview 1–25 JSON rows; every `mode: commit` requires `Idempotency-Key`. If matches exist, send `confirm_duplicates: true` with the same key. Replays return the original lead IDs without creating extra inquiries. |
 
 ## Unified inbox
 

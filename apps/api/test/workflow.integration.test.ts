@@ -159,7 +159,7 @@ describe('StayPilot API workflow integration (PostgreSQL)', () => {
     expect(activities.json().activities.some((item: { activity_type: string }) => item.activity_type === 'updated')).toBe(true);
   });
 
-  it('previews and commits a spreadsheet batch with duplicate confirmation', async () => {
+  it('previews and commits a spreadsheet batch with durable idempotency and duplicate confirmation', async () => {
     const rows = [leadPayload('import-a'), leadPayload('import-b')].map((value, index) => ({
       ...value,
       client_name: value.client_name + '-' + index,
@@ -170,25 +170,58 @@ describe('StayPilot API workflow integration (PostgreSQL)', () => {
     expect(preview.json().row_count).toBe(2);
     expect(preview.json().duplicate_count).toBe(0);
 
-    const commit = await app.inject({ method: 'POST', url: '/api/leads/import', payload: { mode: 'commit', rows } });
+    const commitHeaders = { 'idempotency-key': 'workflow-' + fixture + '-import-batch-001' };
+    const commit = await app.inject({ method: 'POST', url: '/api/leads/import', headers: commitHeaders, payload: { mode: 'commit', rows } });
     expect(commit.statusCode).toBe(201);
     expect(commit.json().created).toBe(2);
-    leadIds.push(...commit.json().leads.map((row: { id: string }) => row.id));
+    const committedIds = commit.json().leads.map((row: { id: string }) => row.id);
+    leadIds.push(...committedIds);
+
+    // Simulate the client losing the 201 response and retrying the exact same request.
+    const replay = await app.inject({ method: 'POST', url: '/api/leads/import', headers: commitHeaders, payload: { mode: 'commit', rows } });
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json().duplicate_request).toBe(true);
+    expect(replay.json().created).toBe(0);
+    expect(replay.json().leads.map((row: { id: string }) => row.id)).toEqual(committedIds);
+
+    const changedPayload = rows.map((row, index) => index === 0 ? { ...row, client_name: 'Changed import payload ' + fixture } : row);
+    const conflict = await app.inject({ method: 'POST', url: '/api/leads/import', headers: commitHeaders, payload: { mode: 'commit', rows: changedPayload } });
+    expect(conflict.statusCode).toBe(409);
+    expect(conflict.json().code).toBe('idempotency_conflict');
+
+    const savedCount = await pool.query('SELECT count(*)::int AS count FROM leads WHERE workspace_id=$1 AND client_email=ANY($2::text[])', [workspaceId, rows.map(row => row.client_email)]);
+    expect(savedCount.rows[0].count).toBe(2);
 
     const duplicateRows = [rows[0]];
     const duplicatePreview = await app.inject({ method: 'POST', url: '/api/leads/import', payload: { mode: 'preview', rows: duplicateRows } });
     expect(duplicatePreview.statusCode).toBe(200);
     expect(duplicatePreview.json().duplicate_count).toBeGreaterThan(0);
-    const blockedCommit = await app.inject({ method: 'POST', url: '/api/leads/import', payload: { mode: 'commit', rows: duplicateRows } });
+    const confirmationHeaders = { 'idempotency-key': 'workflow-' + fixture + '-import-confirm-001' };
+    const blockedCommit = await app.inject({ method: 'POST', url: '/api/leads/import', headers: confirmationHeaders, payload: { mode: 'commit', rows: duplicateRows } });
     expect(blockedCommit.statusCode).toBe(409);
     expect(blockedCommit.json().code).toBe('duplicate_confirmation_required');
 
     const confirmed = await app.inject({
-      method: 'POST', url: '/api/leads/import', payload: { mode: 'commit', rows: duplicateRows, confirm_duplicates: true }
+      method: 'POST', url: '/api/leads/import', headers: confirmationHeaders,
+      payload: { mode: 'commit', rows: duplicateRows, confirm_duplicates: true }
     });
     expect(confirmed.statusCode).toBe(201);
     expect(confirmed.json().created).toBe(1);
-    leadIds.push(...confirmed.json().leads.map((row: { id: string }) => row.id));
+    const confirmedId = confirmed.json().leads[0].id as string;
+    leadIds.push(confirmedId);
+
+    // Confirmation retry must use the same key and must not create a second row.
+    const confirmedReplay = await app.inject({
+      method: 'POST', url: '/api/leads/import', headers: confirmationHeaders,
+      payload: { mode: 'commit', rows: duplicateRows, confirm_duplicates: true }
+    });
+    expect(confirmedReplay.statusCode).toBe(200);
+    expect(confirmedReplay.json().duplicate_request).toBe(true);
+    expect(confirmedReplay.json().leads.map((row: { id: string }) => row.id)).toEqual([confirmedId]);
+
+    const missingHeader = await app.inject({ method: 'POST', url: '/api/leads/import', payload: { mode: 'commit', rows: [leadPayload('missing-key')] } });
+    expect(missingHeader.statusCode).toBe(400);
+    expect(missingHeader.json().code).toBe('idempotency_key_required');
   });
 
   it('requires consent and CAPTCHA, never lets public callers set internal workflow fields', async () => {
