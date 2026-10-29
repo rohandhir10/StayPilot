@@ -125,7 +125,7 @@ export async function upsertExternalMessageWithClient(client: pg.PoolClient, inp
   const externalThreadId = input.externalThreadId.slice(0, 500);
   const timestamp = input.providerCreatedAt && !Number.isNaN(Date.parse(input.providerCreatedAt))
     ? new Date(input.providerCreatedAt) : new Date();
-  const conversation = await client.query<{ id: string }>(
+  const conversation = await client.query<{ id: string; linked_lead_id: string | null }>(
     `INSERT INTO sp_conversations (workspace_id, channel_key, external_account_id, external_thread_id, title, participant_display, participant_address, last_message_at, updated_at)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,now())
      ON CONFLICT (workspace_id, channel_key, external_account_id, external_thread_id) DO UPDATE SET
@@ -133,7 +133,7 @@ export async function upsertExternalMessageWithClient(client: pg.PoolClient, inp
        participant_display = CASE WHEN EXCLUDED.participant_display <> '' THEN EXCLUDED.participant_display ELSE sp_conversations.participant_display END,
        participant_address = CASE WHEN EXCLUDED.participant_address <> '' THEN EXCLUDED.participant_address ELSE sp_conversations.participant_address END,
        last_message_at = GREATEST(COALESCE(sp_conversations.last_message_at, 'epoch'::timestamptz), EXCLUDED.last_message_at), updated_at = now()
-     RETURNING id`,
+     RETURNING id, linked_lead_id`,
     [input.workspaceId, input.channelKey, externalAccountId, externalThreadId, safeText(input.title || '', 300) || '', safeText(input.participantDisplay || '', 160) || '', safeText(input.participantAddress || '', 320) || '', timestamp]
   );
   const conversationId = conversation.rows[0]!.id;
@@ -148,6 +148,38 @@ export async function upsertExternalMessageWithClient(client: pg.PoolClient, inp
   );
   if (msg.rows.length) {
     await client.query('UPDATE sp_conversations SET unread_count=unread_count+1, updated_at=now() WHERE id=$1 AND workspace_id=$2', [conversationId, input.workspaceId]);
+    const linkedLeadId = conversation.rows[0]?.linked_lead_id;
+    if (linkedLeadId) {
+      // A newly ingested customer reply pauses internal follow-up tasks for that lead.
+      // It never sends a message or changes the lead's commercial status.
+      const paused = await client.query(
+        `UPDATE sp_sales_workflow_enrollments
+         SET status='paused', pause_reason='customer_reply', next_action_at=NULL, updated_at=now()
+         WHERE workspace_id=$1 AND lead_id=$2 AND status='active'
+         RETURNING id`,
+        [input.workspaceId, linkedLeadId]
+      );
+      if (paused.rows.length) {
+        await client.query(
+          'UPDATE leads SET next_follow_up=NULL, updated_at=now() WHERE workspace_id=$1 AND id=$2',
+          [input.workspaceId, linkedLeadId]
+        );
+        await client.query(
+          `INSERT INTO lead_activities (workspace_id, lead_id, activity_type, description, actor)
+           VALUES ($1,$2,'workflow_paused_on_reply','Sales workflow paused because a new inbound customer message arrived.','StayPilot')`,
+          [input.workspaceId, linkedLeadId]
+        );
+        for (const enrollment of paused.rows) {
+          await auditEvent(client, {
+            workspaceId: input.workspaceId,
+            action: 'workflow.paused_on_reply',
+            entityType: 'workflow_enrollment',
+            entityId: enrollment.id,
+            metadata: { lead_id: linkedLeadId, channel_key: input.channelKey }
+          });
+        }
+      }
+    }
   }
   return { conversationId, inserted: msg.rows.length > 0 };
 }

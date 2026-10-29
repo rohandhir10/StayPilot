@@ -5,13 +5,15 @@ export class ApiError extends Error {
   status: number;
   code?: string;
   requestId?: string;
+  data?: Record<string, unknown>;
 
-  constructor(message: string, status: number, code?: string, requestId?: string) {
+  constructor(message: string, status: number, code?: string, requestId?: string, data?: Record<string, unknown>) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.code = code;
     this.requestId = requestId;
+    this.data = data;
   }
 }
 
@@ -44,9 +46,9 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     const errorData = data && typeof data === 'object' ? data as Record<string, unknown> : {};
     const message = typeof errorData.error === 'string' ? errorData.error : `Request failed with status ${response.status}.`;
     const code = typeof errorData.code === 'string' ? errorData.code : undefined;
-    if (response.status === 401) throw new ApiError('Your session is no longer valid. Sign in again.', 401, code, requestId);
-    if (response.status === 403) throw new ApiError('Your account does not have permission to do that.', 403, code, requestId);
-    throw new ApiError(message, response.status, code, requestId);
+    if (response.status === 401) throw new ApiError('Your session is no longer valid. Sign in again.', 401, code, requestId, errorData);
+    if (response.status === 403) throw new ApiError('Your account does not have permission to do that.', 403, code, requestId, errorData);
+    throw new ApiError(message, response.status, code, requestId, errorData);
   }
   return data as T;
 }

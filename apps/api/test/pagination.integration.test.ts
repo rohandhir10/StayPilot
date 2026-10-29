@@ -18,8 +18,10 @@ const messageConversationIds: string[] = [];
 
 describe('cursor pagination and inbox read consistency (PostgreSQL integration)', () => {
   beforeAll(async () => {
-    const ws = await pool.query<{ id: string }>("SELECT id FROM workspaces WHERE slug='default' LIMIT 1");
-    if (!ws.rows[0]) throw new Error('Default workspace migration was not applied.');
+    const ws = await pool.query<{ id: string }>(
+      'INSERT INTO workspaces (slug, name) VALUES ($1, $2) RETURNING id',
+      [`pagination-test-${fixture}`, `Pagination Test ${fixture}`]
+    );
     workspaceId = ws.rows[0].id;
     mocks.requireWorkspaceMember.mockImplementation(async () => ({
       workspace_id: workspaceId, user_id: 'user_pagination_test', email: 'pagination@example.test', display_name: 'Pagination Test', role: 'owner'
@@ -61,7 +63,8 @@ describe('cursor pagination and inbox read consistency (PostgreSQL integration)'
     await app.close();
     if (messageConversationIds.length) await pool.query('DELETE FROM sp_conversations WHERE id=ANY($1::uuid[])', [messageConversationIds]);
     if (conversationIds.length) await pool.query('DELETE FROM sp_conversations WHERE id=ANY($1::uuid[])', [conversationIds]);
-    if (leadIds.length) await pool.query('DELETE FROM leads WHERE id=ANY($1::uuid[])', [leadIds]);
+    if (leadIds.length) await pool.query('DELETE FROM leads WHERE workspace_id=$1 AND id=ANY($2::uuid[])', [workspaceId, leadIds]);
+    if (workspaceId) await pool.query('DELETE FROM workspaces WHERE id=$1', [workspaceId]);
   });
   it('returns every inquiry exactly once across keyset pages', async () => {
     const firstResponse = await app.inject({ method: 'GET', url: '/api/leads/list?limit=2' });
