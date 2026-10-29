@@ -8,7 +8,7 @@ Real credentials must be created or authorized in the corresponding provider acc
 2. Copy the publishable key to Vercel as `VITE_CLERK_PUBLISHABLE_KEY` and the matching secret key to Railway as `CLERK_SECRET_KEY`.
 3. Add the same publishable key to Railway as `CLERK_PUBLISHABLE_KEY`.
 4. Configure allowed application origins and sign-in behavior in Clerk; use production keys for production.
-5. Create the intended first owner account and set the user's real Clerk `user_…` ID as Railway's `OWNER_CLERK_USER_ID` before first API sign-in.
+5. Create the intended first owner account and set the user's real `user_…` ID as Railway's `OWNER_CLERK_USER_ID` before first API sign-in.
 6. Other users require both an authenticated Clerk session and a verified email matching an unexpired StayPilot invitation. The invitation endpoint currently creates a database access grant but does not send an email or create a Clerk invitation automatically.
 
 The API accepts Clerk-validated session tokens; it does not accept a client-supplied user ID or role as proof of identity. It uses the Clerk Backend API only when a user without an existing workspace membership must have their verified email checked.

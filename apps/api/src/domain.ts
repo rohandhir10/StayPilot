@@ -147,4 +147,3 @@ export async function upsertExternalMessageWithClient(client: pg.PoolClient, inp
   }
   return { conversationId, inserted: msg.rows.length > 0 };
 }
-

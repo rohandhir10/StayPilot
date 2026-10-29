@@ -39,7 +39,7 @@
 - **Meta requires approval and configuration.** Webhook intake handles selected inbound message payloads; it ignores status/delivery events and does not download media/attachments. Business verification, app permissions and subscribed topics remain provider-side work.
 - **No email invite delivery.** Team invites create workspace grants, but email delivery/Clerk invitation creation is not implemented.
 - **Single default workspace.** Schema records carry `workspace_id`, but multi-workspace account switching, per-hotel tenancy and operator-facing workspace selection are not implemented/tested.
-- **No confirmed booking/pms synchronization.** An inquiry or conversation is not a reservation. Hotel inventory/pricing and live availability are outside this backend.
+- **No confirmed booking/PMS synchronization.** An inquiry or conversation is not a reservation. Hotel inventory/pricing and live availability are outside this backend.
 - **No automated data deletion for lead/message content.** Audit events are retained until the owner approves a retention policy. The scheduled cleanup removes only expired rate-limit buckets and old webhook event metadata (processed/ignored after 90 days; failed after 30 days). This is not a compliance certification.
 - **Rate limiting is layered, not a DDoS provider.** The Fastify per-IP limiter is per process/instance; public email/IP and partner-key limits are database-backed. Production proxy trust must be configured correctly, and provider-level/network rate protection may still be needed.
 - **Duplicate detection is advisory.** The import/inquiry overlap logic does not auto-merge or guarantee detection of all duplicates; concurrent submissions can still become separate inquiries.
