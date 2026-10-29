@@ -17,6 +17,7 @@ import { registerPartnerRoutes } from './routes/partner.js';
 import { registerPublicInquiryRoutes } from './routes/public-inquiry.js';
 import { registerImportRoutes } from './routes/import.js';
 import { registerMetaWebhookRoutes } from './routes/webhooks-meta.js';
+import { registerActionCentreRoutes } from './routes/action-centre.js';
 
 const app = Fastify({
   logger: {
@@ -101,6 +102,7 @@ await registerPartnerRoutes(app);
 await registerPublicInquiryRoutes(app);
 await registerImportRoutes(app);
 await registerMetaWebhookRoutes(app);
+await registerActionCentreRoutes(app);
 
 try {
   await checkDatabase();
