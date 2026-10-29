@@ -155,7 +155,57 @@ export function renderSalesWorkflow(box, { leads, api, workspaceSession, isPrevi
   let reviewed = false;
   let draftOverride = false;
   let currentDraft = "";
+  let enrollments = [];
+  let queueLoading = !isPreview;
+  let queueLoadError = "";
   const canWrite = !isPreview && ["owner", "admin", "sales"].includes(workspaceSession?.workspace?.role);
+
+  async function loadQueue() {
+    if (isPreview) {
+      enrollments = [];
+      queueLoading = false;
+      queueLoadError = "";
+      return;
+    }
+    queueLoading = true;
+    try {
+      const data = await api("/workflows/queue?limit=100");
+      enrollments = Array.isArray(data.enrollments) ? data.enrollments : [];
+      queueLoadError = "";
+    } catch (error) {
+      enrollments = [];
+      queueLoadError = error?.message || "Could not load the persistent workflow queue.";
+    } finally {
+      queueLoading = false;
+    }
+  }
+
+  function workflowPanel(lead, selectedPlaybook) {
+    if (isPreview) {
+      return '<div class="wf-sequence-panel"><div><b>Persistent sequence</b><p>Preview mode: sequence steps are illustrative only. No tasks are saved.</p></div><button type="button" class="btn btn-primary" disabled>Start sequence</button></div>';
+    }
+    if (queueLoading) {
+      return '<div class="wf-sequence-panel"><div><b>Loading saved workflow status…</b><p>StayPilot is checking the persistent task queue.</p></div></div>';
+    }
+    if (queueLoadError) {
+      return '<div class="wf-sequence-panel wf-sequence-warning"><div><b>Workflow queue unavailable</b><p>' + esc(queueLoadError) + '</p></div><button type="button" class="btn btn-secondary" data-wf-action="refresh-queue">Retry</button></div>';
+    }
+    const enrollment = enrollments.find(item => item.lead_id === lead?.id);
+    if (!enrollment) {
+      return '<div class="wf-sequence-panel"><div><b>Start a persistent sequence</b><p>StayPilot will save one internal task at a time, create the next task when the current one is completed, pause when a linked customer conversation receives a newer reply, and stop when the enquiry closes. It will not send messages or confirm commercial details.</p></div><button type="button" class="btn btn-primary" data-wf-action="start-sequence" ' + (canWrite && !["Confirmed", "Lost"].includes(lead?.status) ? "" : "disabled") + '>Start sequence</button></div>';
+    }
+    const paused = enrollment.enrollment_status === "paused";
+    const taskDue = enrollment.task_scheduled_at ? new Date(enrollment.task_scheduled_at).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }) : "No current task";
+    const pausedLabel = enrollment.pause_reason === "customer_reply" ? "A new inbound customer message paused this sequence. Review the conversation before resuming." : "This sequence is paused.";
+    return '<div class="wf-sequence-panel ' + (paused ? "wf-sequence-warning" : "") + '">' +
+      '<div class="wf-sequence-title"><div><small>PERSISTENT SEQUENCE</small><b>' + esc((playbooks.find(item => item.id === enrollment.sequence_key) || playbooks.find(item => item.id === selectedPlaybook) || playbooks[3]).title) + '</b></div><span class="wf-stage">' + esc(paused ? "Paused" : "Active") + '</span></div>' +
+      (paused ? '<p class="wf-sequence-note">' + esc(pausedLabel) + '</p>' : '') +
+      (enrollment.task_id ? '<div class="wf-current-task"><small>STEP ' + esc(enrollment.task_step_number) + ' · NEXT ACTION ' + esc(taskDue) + '</small><b>' + esc(enrollment.task_title || "Current workflow task") + '</b><p>' + esc(enrollment.task_instructions || "Complete this task only after verifying the required facts.") + '</p></div>' : '<p class="wf-sequence-note">No scheduled task is attached to this workflow. Refresh the queue and review its state before continuing.</p>') +
+      '<div class="wf-sequence-actions">' +
+      (paused ? '<button type="button" class="btn btn-primary" data-wf-action="resume-sequence" ' + (canWrite ? "" : "disabled") + '>' + (enrollment.pause_reason === "customer_reply" ? "Resume after reply review" : "Resume sequence") + '</button>' : '<button type="button" class="btn btn-secondary" data-wf-action="complete-step" ' + (canWrite && enrollment.task_id ? "" : "disabled") + '>Mark task complete</button><button type="button" class="btn btn-secondary" data-wf-action="pause-sequence" ' + (canWrite ? "" : "disabled") + '>Pause</button>') +
+      '<button type="button" class="btn btn-secondary" data-wf-action="cancel-sequence" ' + (canWrite ? "" : "disabled") + '>Cancel sequence</button><button type="button" class="btn btn-secondary" data-wf-action="refresh-queue">Refresh</button></div>' +
+      '<p class="wf-footnote">Tasks and timing are saved. Message sending, pricing, inventory checks and booking confirmation are not automated.</p></div>';
+  }
 
   function render() {
     const work = activeLeads(leads);
@@ -167,6 +217,7 @@ export function renderSalesWorkflow(box, { leads, api, workspaceSession, isPrevi
     const playbook = playbooks.find(item => item.id === selectedPlaybook) || playbooks[3];
     const checks = lead ? dataChecks(lead) : [];
     const draft = lead ? playbook.body(lead) : "";
+    const sequencePanel = lead ? workflowPanel(lead, selectedPlaybook) : "";
     currentDraft = draft;
     reviewed = false;
     draftOverride = false;
@@ -181,7 +232,7 @@ export function renderSalesWorkflow(box, { leads, api, workspaceSession, isPrevi
         (duplicates ? '<span class="wf-warning-chip">Review overlap</span>' : '') + '</div></button>';
     }).join("") : '<div class="empty-state"><b>No open inquiries</b><p>There are no active leads in this workspace.</p></div>';
 
-    box.innerHTML = '<div class="wf-banner"><div class="wf-banner-icon">✓</div><div><b>Workflow desk · prepare once, verify before acting</b><p>StayPilot organises the next action, drafts a response from approved text and schedules a reminder. It does not send messages, promise a rate, check live inventory or confirm a booking.</p></div></div>' +
+    box.innerHTML = '<div class="wf-banner"><div class="wf-banner-icon">✓</div><div><b>Workflow desk · prepare once, verify before acting</b><p>StayPilot saves workflow tasks and next-action timing, drafts a response for review, and pauses on linked customer replies. It does not send messages, promise a rate, check live inventory or confirm a booking.</p></div></div>' +
       '<div class="wf-summary"><div><small>OPEN ENQUIRIES</small><b>' + work.length + '</b></div><div><small>FOLLOW-UP OVERDUE</small><b>' + work.filter(item => item.next_follow_up && new Date(item.next_follow_up).getTime() < Date.now()).length + '</b></div><div><small>NEED DATA / OVERLAP REVIEW</small><b>' + work.filter(item => dataChecks(item).length).length + '</b></div></div>' +
       '<div class="wf-layout"><aside class="wf-queue"><div class="wf-section-head"><div><h2>Work queue</h2><p>Sorted by overdue follow-up first.</p></div></div><div class="wf-queue-list">' + queueHtml + '</div></aside>' +
       '<section class="wf-workarea">' + (lead ? (
@@ -189,6 +240,7 @@ export function renderSalesWorkflow(box, { leads, api, workspaceSession, isPrevi
         '<div class="wf-fact-grid"><div><small>TYPE</small><b>' + esc(lead.inquiry_type || "Not recorded") + '</b></div><div><small>DATES</small><b>' + esc(lead.check_in || "Start date missing") + ' → ' + esc(lead.check_out || "End date missing") + '</b></div><div><small>GUESTS / ROOMS</small><b>' + esc(Number(lead.guests) ? String(lead.guests) : "Not recorded") + '</b></div><div><small>OWNER</small><b>' + esc(lead.assigned_to || "Unassigned") + '</b></div></div>' +
         '<div class="wf-section-head"><div><h3>1. Pick a playbook</h3><p>Hotel-specific steps; no invented rates or availability.</p></div><select id="wf-playbook" aria-label="Choose sales playbook">' + playbooks.map(item => '<option value="' + item.id + '" ' + (item.id === playbook.id ? "selected" : "") + '>' + esc(item.title) + '</option>').join("") + '</select></div>' +
         '<div class="wf-playbook-intro"><b>' + esc(playbook.purpose) + '</b><ol>' + playbook.steps.map(step => '<li>' + esc(step) + '</li>').join("") + '</ol></div>' +
+        sequencePanel +
         '<div class="wf-section-head"><div><h3>2. Check the record</h3><p>Missing information and possible overlaps are warnings, not assumptions.</p></div></div>' +
         '<div class="wf-checks">' + (checks.length ? checks.map(item => '<div class="wf-check"><span>!</span><p>' + esc(item) + '</p></div>').join("") : '<div class="wf-clear"><span>✓</span><p>No missing fields detected by basic checks. This is not proof that the information is correct.</p></div>') + '</div>' +
         '<div class="wf-section-head"><div><h3>3. Review a message draft</h3><p>Only uses the contact and property names on this record.</p></div><span class="wf-review-tag">Approval required</span></div>' +
@@ -226,6 +278,110 @@ export function renderSalesWorkflow(box, { leads, api, workspaceSession, isPrevi
     if (!action) return;
     const lead = leads.find(item => item.id === selectedId);
     if (!lead) return;
+    if (action.dataset.wfAction === "refresh-queue") {
+      action.disabled = true;
+      await loadQueue();
+      render();
+      return;
+    }
+    if (action.dataset.wfAction === "start-sequence") {
+      if (!canWrite) {
+        toast(isPreview ? "Preview mode: sequences are not saved." : "Your role cannot start workflows.", true);
+        return;
+      }
+      if (["Confirmed", "Lost"].includes(lead.status)) {
+        toast("Closed opportunities cannot start a sales workflow.", true);
+        return;
+      }
+      action.disabled = true;
+      action.textContent = "Starting…";
+      try {
+        try {
+          await api("/workflows/enroll", {
+            method: "POST",
+            body: JSON.stringify({ lead_id: lead.id, sequence_key: selectedPlaybook, confirm_duplicate_review: false })
+          });
+        } catch (firstError) {
+          if (firstError?.code !== "possible_duplicate_requires_review") throw firstError;
+          const matches = Array.isArray(firstError.data?.potential_duplicates) ? firstError.data.potential_duplicates : [];
+          const details = matches.slice(0, 8).map(item =>
+            (item.client_name || "Contact") + " · " + (item.company_name || "Company not recorded") + " · " +
+            (item.property_name || "Property not recorded") + " · " + (item.status || "Unknown status")
+          ).join("\\n");
+          const prompt = (firstError.message || "Possible overlapping enquiries were found.") +
+            (details ? "\\n\\n" + details : "") +
+            "\\n\\nStart the workflow only if you have reviewed these possible overlaps. Continue?";
+          if (!window.confirm(prompt)) return;
+          await api("/workflows/enroll", {
+            method: "POST",
+            body: JSON.stringify({ lead_id: lead.id, sequence_key: selectedPlaybook, confirm_duplicate_review: true })
+          });
+        }
+        toast("Sequence started. The first internal task is saved; no message was sent.");
+        if (onUpdated) await onUpdated();
+        else { await loadQueue(); render(); }
+      } catch (error) {
+        toast("Could not start sequence: " + (error?.message || "request failed"), true);
+        await loadQueue();
+        render();
+      } finally {
+        if (action.isConnected) action.disabled = false;
+      }
+      return;
+    }
+    if (action.dataset.wfAction === "complete-step") {
+      const enrollment = enrollments.find(item => item.lead_id === lead.id);
+      if (!canWrite || !enrollment?.task_id) {
+        toast("No current workflow task is available to complete.", true);
+        return;
+      }
+      if (!window.confirm("Mark this task complete only after the action described was actually done. StayPilot will schedule the next internal task; it will not send a message. Continue?")) return;
+      action.disabled = true;
+      try {
+        await api("/workflows/tasks/complete", {
+          method: "POST",
+          body: JSON.stringify({ task_id: enrollment.task_id, note: "" })
+        });
+        toast("Task completed. The next workflow action has been saved.");
+        if (onUpdated) await onUpdated();
+        else { await loadQueue(); render(); }
+      } catch (error) {
+        toast("Task was not completed: " + (error?.message || "request failed"), true);
+        await loadQueue();
+        render();
+      } finally {
+        if (action.isConnected) action.disabled = false;
+      }
+      return;
+    }
+    if (["pause-sequence", "resume-sequence", "cancel-sequence"].includes(action.dataset.wfAction)) {
+      const enrollment = enrollments.find(item => item.lead_id === lead.id);
+      if (!canWrite || !enrollment?.enrollment_id) {
+        toast("No saved workflow is available for this enquiry.", true);
+        return;
+      }
+      const actionName = action.dataset.wfAction === "pause-sequence" ? "pause" : action.dataset.wfAction === "resume-sequence" ? "resume" : "cancel";
+      if (actionName === "resume" && enrollment.pause_reason === "customer_reply" &&
+          !window.confirm("A new customer message paused this workflow. Confirm that the conversation has been reviewed and the next follow-up is still appropriate before resuming.")) return;
+      if (actionName === "cancel" && !window.confirm("Cancel this workflow? Scheduled internal tasks for this workflow will be cancelled. No message will be sent.")) return;
+      action.disabled = true;
+      try {
+        await api("/workflows/enrollments/action", {
+          method: "POST",
+          body: JSON.stringify({ enrollment_id: enrollment.enrollment_id, action: actionName })
+        });
+        toast(actionName === "pause" ? "Workflow paused." : actionName === "resume" ? "Workflow resumed after review." : "Workflow cancelled.");
+        if (onUpdated) await onUpdated();
+        else { await loadQueue(); render(); }
+      } catch (error) {
+        toast("Workflow action failed: " + (error?.message || "request failed"), true);
+        await loadQueue();
+        render();
+      } finally {
+        if (action.isConnected) action.disabled = false;
+      }
+      return;
+    }
     if (action.dataset.wfAction === "copy-draft") {
       if (["Confirmed", "Lost"].includes(lead.status)) {
         toast("This inquiry is marked closed; no sales follow-up draft can be copied.", true);
@@ -287,4 +443,5 @@ export function renderSalesWorkflow(box, { leads, api, workspaceSession, isPrevi
   });
 
   render();
+  void loadQueue().then(() => render());
 }
