@@ -1,4 +1,4 @@
-import Fastify from 'fastify';
+import Fastify, { type RawServerDefault } from 'fastify';
 import { randomUUID } from 'node:crypto';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
@@ -19,7 +19,7 @@ import { registerPublicInquiryRoutes } from './routes/public-inquiry.js';
 import { registerImportRoutes } from './routes/import.js';
 import { registerMetaWebhookRoutes } from './routes/webhooks-meta.js';
 
-const app = Fastify({
+const app = Fastify<RawServerDefault>({
   logger: {
     level: env.logLevel,
     redact: {
@@ -27,7 +27,7 @@ const app = Fastify({
       censor: '[REDACTED]'
     }
   },
-  trustProxy: env.trustProxyHops,
+  trustProxy: env.trustProxyHops === 0 ? false : (_address, hop) => hop < env.trustProxyHops,
   bodyLimit: env.webhookBodyLimitBytes,
   requestIdHeader: false,
   genReqId: () => randomUUID()
@@ -74,9 +74,12 @@ app.addHook('onSend', async (request, reply, payload) => {
 
 app.setNotFoundHandler((_request, reply) => reply.code(404).send({ error: 'Endpoint not found.', code: 'not_found' }));
 app.setErrorHandler((error, request, reply) => {
-  const status = Number.isInteger(error.statusCode) && error.statusCode! >= 400 && error.statusCode! < 600 ? error.statusCode! : 500;
+  const candidate = error && typeof error === 'object' ? error as { statusCode?: unknown; code?: unknown } : {};
+  const rawStatus = candidate.statusCode;
+  const status = typeof rawStatus === 'number' && Number.isInteger(rawStatus) && rawStatus >= 400 && rawStatus < 600 ? rawStatus : 500;
   if (status >= 500) {
-    request.log.error({ requestId: request.id, errorCode: (error as NodeJS.ErrnoException).code || 'internal_error' }, 'request failed');
+    const errorCode = typeof candidate.code === 'string' ? candidate.code : 'internal_error';
+    request.log.error({ requestId: request.id, errorCode }, 'request failed');
     return reply.code(500).send({ error: 'An unexpected error occurred.', code: 'internal_error', request_id: request.id });
   }
   const code = status === 413 ? 'request_too_large' : status === 415 ? 'unsupported_media_type' : 'invalid_request';
