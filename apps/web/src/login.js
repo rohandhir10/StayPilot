@@ -6,7 +6,7 @@ const signInMount = document.getElementById('clerk-sign-in');
 
 function safeNext() {
   const candidate = new URLSearchParams(location.search).get('next') || '/';
-  if (!candidate.startsWith('/') || candidate.startsWith('//') || candidate.includes('\\\\')) return '/';
+  if (!candidate.startsWith('/') || candidate.startsWith('//') || candidate.includes('\\')) return '/';
   return candidate;
 }
 
