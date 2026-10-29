@@ -26,6 +26,12 @@ const schema = z.object({
   WEB_ORIGINS: z.string().min(1),
   META_APP_SECRET: z.preprocess(value => value === '' ? undefined : value, z.string().min(1).optional()),
   META_WEBHOOK_VERIFY_TOKEN: z.preprocess(value => value === '' ? undefined : value, z.string().min(24).optional()),
+  API_PUBLIC_ORIGIN: z.preprocess(value => value === '' ? undefined : value, z.string().url().optional()),
+  GOOGLE_OAUTH_CLIENT_ID: z.preprocess(value => value === '' ? undefined : value, z.string().min(1).optional()),
+  GOOGLE_OAUTH_CLIENT_SECRET: z.preprocess(value => value === '' ? undefined : value, z.string().min(1).optional()),
+  MICROSOFT_OAUTH_CLIENT_ID: z.preprocess(value => value === '' ? undefined : value, z.string().min(1).optional()),
+  MICROSOFT_OAUTH_CLIENT_SECRET: z.preprocess(value => value === '' ? undefined : value, z.string().min(1).optional()),
+  OAUTH_TOKEN_ENCRYPTION_KEY: z.preprocess(value => value === '' ? undefined : value, z.string().min(1).optional()),
   TURNSTILE_SECRET_KEY: z.preprocess(value => value === '' ? undefined : value, z.string().min(1).optional()),
   TURNSTILE_SITE_KEY: z.preprocess(value => value === '' ? undefined : value, z.string().min(1).optional()),
   RATE_LIMIT_PUBLIC_PER_HOUR: integerFromEnv(5, 1, 100),
@@ -40,6 +46,20 @@ if (!parsed.success) {
   const issues = parsed.error.issues.map(issue => `${issue.path.join('.')}: ${issue.message}`).join('; ');
   // Report missing variable names and validation messages only, never values.
   throw new Error(`Invalid StayPilot API configuration: ${issues}`);
+}
+
+if (parsed.data.OAUTH_TOKEN_ENCRYPTION_KEY && Buffer.from(parsed.data.OAUTH_TOKEN_ENCRYPTION_KEY, 'base64').length !== 32) {
+  throw new Error('OAUTH_TOKEN_ENCRYPTION_KEY must be a base64-encoded 32-byte key.');
+}
+if (parsed.data.API_PUBLIC_ORIGIN) {
+  try {
+    const publicOrigin = new URL(parsed.data.API_PUBLIC_ORIGIN);
+    if (publicOrigin.origin !== parsed.data.API_PUBLIC_ORIGIN.replace(/\\/$/, '') || publicOrigin.pathname !== '/' || publicOrigin.search || publicOrigin.hash || (parsed.data.NODE_ENV === 'production' && publicOrigin.protocol !== 'https:')) {
+      throw new Error();
+    }
+  } catch {
+    throw new Error('API_PUBLIC_ORIGIN must be an exact API origin (HTTPS in production), without a path.');
+  }
 }
 
 if (parsed.data.TRUSTED_PROXY_CIDRS.some(value => !isValidTrustedProxyCidr(value))) {
@@ -86,6 +106,12 @@ export const env = Object.freeze({
   webOrigins: parsed.data.WEB_ORIGINS.split(',').map(s => s.trim()).filter(Boolean),
   metaAppSecret: parsed.data.META_APP_SECRET,
   metaWebhookVerifyToken: parsed.data.META_WEBHOOK_VERIFY_TOKEN,
+  apiPublicOrigin: parsed.data.API_PUBLIC_ORIGIN?.replace(/\\/$/, ''),
+  googleOAuthClientId: parsed.data.GOOGLE_OAUTH_CLIENT_ID,
+  googleOAuthClientSecret: parsed.data.GOOGLE_OAUTH_CLIENT_SECRET,
+  microsoftOAuthClientId: parsed.data.MICROSOFT_OAUTH_CLIENT_ID,
+  microsoftOAuthClientSecret: parsed.data.MICROSOFT_OAUTH_CLIENT_SECRET,
+  oauthTokenEncryptionKey: parsed.data.OAUTH_TOKEN_ENCRYPTION_KEY,
   turnstileSecretKey: parsed.data.TURNSTILE_SECRET_KEY,
   turnstileSiteKey: parsed.data.TURNSTILE_SITE_KEY,
   publicRateLimitPerHour: parsed.data.RATE_LIMIT_PUBLIC_PER_HOUR,
