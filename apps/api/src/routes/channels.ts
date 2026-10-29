@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { pool } from '../db.js';
 import { requireWorkspaceMember } from '../auth.js';
 import { fail, noStore } from '../http.js';
+import { MailSyncError, syncMailboxForWorkspace } from './mail-sync.js';
 
 export async function registerChannelRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/channels/status', async (request, reply) => {
@@ -29,11 +30,22 @@ export async function registerChannelRoutes(app: FastifyInstance): Promise<void>
     }
   });
 
-  // Intentionally not a fake success: inbox sync stays off until each provider's OAuth,
-  // refresh-token storage, permissions and retry semantics have been implemented and tested.
   app.post('/api/integrations/sync', async (request, reply) => {
     const member = await requireWorkspaceMember(request, reply, ['owner', 'admin', 'sales']);
     if (!member) return;
-    return fail(reply, 501, 'Mailbox synchronization is not enabled yet. Connectors must be configured and tested before StayPilot imports external mail.', 'channel_sync_unimplemented');
+    const body = request.body && typeof request.body === 'object' && !Array.isArray(request.body)
+      ? request.body as Record<string, unknown> : {};
+    const channelKey = body.channel_key;
+    if (channelKey !== 'email_gmail' && channelKey !== 'email_outlook') {
+      return fail(reply, 400, 'Choose Gmail or Outlook by setting channel_key to email_gmail or email_outlook.', 'invalid_mail_channel');
+    }
+    try {
+      const result = await syncMailboxForWorkspace(member, channelKey);
+      noStore(reply);
+      return reply.send(result);
+    } catch (error) {
+      const connector = error instanceof MailSyncError ? error : new MailSyncError('mail_sync_failed', 502);
+      return fail(reply, connector.statusCode, connector.message, connector.code);
+    }
   });
 }
