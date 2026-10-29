@@ -20,6 +20,7 @@ All paths include `/api`. Private endpoints require `Authorization: Bearer <Cler
 | POST | `/api/team/invites/:id/revoke` | Owner/admin | Revoke a pending invite |
 | GET | `/api/team/members` | Owner/admin | List active/inactive members |
 | POST | `/api/team/members/:userId/deactivate` | Owner/admin | Deactivate access (owner cannot be deactivated; admin can only be deactivated by owner) |
+| POST | `/api/team/members/:userId/reactivate` | Owner/admin | Restore inactive access (only owner may reactivate an owner/admin) |
 
 ## Inquiries
 

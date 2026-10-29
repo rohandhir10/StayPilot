@@ -110,6 +110,37 @@ export async function registerWorkspaceRoutes(app: FastifyInstance): Promise<voi
     }
   });
 
+  app.post('/api/team/members/:userId/reactivate', async (request, reply) => {
+    const member = await requireWorkspaceMember(request, reply, ['owner', 'admin']);
+    if (!member) return;
+    const targetUserId = (request.params as { userId?: string }).userId || '';
+    if (targetUserId.length < 5 || targetUserId.length > 200) return fail(reply, 400, 'A valid member identifier is required.', 'invalid_member_id');
+    try {
+      const outcome = await inTransaction(async client => {
+        const target = await client.query<{ role: MemberRole; is_active: boolean }>(
+          'SELECT role, is_active FROM workspace_members WHERE workspace_id=$1 AND user_id=$2 FOR UPDATE',
+          [member.workspace_id, targetUserId]
+        );
+        const existing = target.rows[0];
+        if (!existing) return 'missing' as const;
+        if (existing.is_active) return 'already_active' as const;
+        if ((existing.role === 'owner' || existing.role === 'admin') && member.role !== 'owner') return 'forbidden' as const;
+        await client.query(
+          'UPDATE workspace_members SET is_active=true, updated_at=now() WHERE workspace_id=$1 AND user_id=$2',
+          [member.workspace_id, targetUserId]
+        );
+        await auditEvent(client, { workspaceId: member.workspace_id, actor: member, action: 'team.member_reactivated', entityType: 'workspace_member', entityId: targetUserId, metadata: { role: existing.role } });
+        return 'ok' as const;
+      });
+      if (outcome === 'missing') return fail(reply, 404, 'Workspace member not found.', 'member_not_found');
+      if (outcome === 'already_active') return fail(reply, 409, 'This workspace member is already active.', 'member_already_active');
+      if (outcome === 'forbidden') return fail(reply, 403, 'Only the owner may reactivate an owner or administrator.', 'owner_role_required');
+      noStore(reply);
+      return reply.send({ ok: true, reactivated: true });
+    } catch {
+      return fail(reply, 500, 'Could not restore workspace access.', 'member_reactivation_failed');
+    }
+  });
   app.post('/api/team/members/:userId/deactivate', async (request, reply) => {
     const member = await requireWorkspaceMember(request, reply, ['owner', 'admin']);
     if (!member) return;
