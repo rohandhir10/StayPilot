@@ -3,16 +3,11 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  getUserFromRequest: vi.fn()
+  verifyToken: vi.fn(async (token: string) => ({ uid: token, email: null, emailVerified: false, name: null }))
 }));
-vi.mock('@clerk/fastify', () => ({
-  getAuth: (request: { headers: Record<string, unknown> }) => {
-    const userId = request.headers['x-test-clerk-user'];
-    return typeof userId === 'string' && userId.length
-      ? { isAuthenticated: true, userId }
-      : { isAuthenticated: false, userId: null };
-  },
-  clerkClient: { users: { getUser: mocks.getUserFromRequest } }
+vi.mock('../src/firebase-auth.js', () => ({
+  verifyFirebaseToken: mocks.verifyToken,
+  FirebaseAuthNotConfiguredError: class FirebaseAuthNotConfiguredError extends Error {}
 }));
 
 import { pool } from '../src/db.js';
@@ -37,12 +32,12 @@ const inviteEmails = [`auth-${fixture}-viewer-invite@example.test`, `auth-${fixt
 async function asUser(userId: string | null, input: { method: 'GET' | 'POST' | 'DELETE'; url: string; payload?: unknown }) {
   return app.inject({
     ...input,
-    headers: userId ? { 'x-test-clerk-user': userId } : {},
+    headers: userId ? { authorization: `Bearer ${userId}` } : {},
     ...(input.payload === undefined ? {} : { payload: input.payload })
   });
 }
 
-describe('real membership and role checks (PostgreSQL integration; Clerk identity extractor stubbed)', () => {
+describe('real membership and role checks (PostgreSQL integration; Firebase token verifier stubbed)', () => {
   beforeAll(async () => {
     const ws = await pool.query<{ id: string }>("SELECT id FROM workspaces WHERE slug='default' LIMIT 1");
     if (!ws.rows[0]) throw new Error('Default workspace migration must run first.');
@@ -216,7 +211,7 @@ describe('real membership and role checks (PostgreSQL integration; Clerk identit
     expect(blocked.statusCode).toBe(401);
     expect(blocked.json().code).toBe('partner_key_invalid');
   });
-  it('accepts a pending invitation only when the authenticated Clerk profile has a verified matching email', async () => {
+  it('accepts a pending invitation only when the authenticated Firebase profile has a verified matching email', async () => {
     const acceptedEmail = inviteEmails[3];
     const unverifiedEmail = inviteEmails[4];
     users.invitee = { id: `user_auth_${fixture}_invitee`, email: acceptedEmail, role: 'sales', active: true };
@@ -224,11 +219,7 @@ describe('real membership and role checks (PostgreSQL integration; Clerk identit
 
     const invite = await asUser(users.owner.id, { method: 'POST', url: '/api/team/invites', payload: { email: acceptedEmail, role: 'sales' } });
     expect(invite.statusCode).toBe(201);
-    mocks.getUserFromRequest.mockResolvedValueOnce({
-      id: users.invitee.id, primaryEmailAddressId: 'email_verified_invitee',
-      emailAddresses: [{ id: 'email_verified_invitee', emailAddress: acceptedEmail, verification: { status: 'verified' } }],
-      firstName: 'Invited', lastName: 'Sales User'
-    });
+    mocks.verifyToken.mockResolvedValueOnce({ uid: users.invitee.id, email: acceptedEmail, emailVerified: true, name: 'Invited Sales User' });
     const accepted = await asUser(users.invitee.id, { method: 'GET', url: '/api/session' });
     expect(accepted.statusCode).toBe(200);
     expect(accepted.json().user.email).toBe(acceptedEmail);
@@ -242,11 +233,7 @@ describe('real membership and role checks (PostgreSQL integration; Clerk identit
 
     const secondInvite = await asUser(users.owner.id, { method: 'POST', url: '/api/team/invites', payload: { email: unverifiedEmail, role: 'viewer' } });
     expect(secondInvite.statusCode).toBe(201);
-    mocks.getUserFromRequest.mockResolvedValueOnce({
-      id: users.unverified.id, primaryEmailAddressId: 'email_unverified_user',
-      emailAddresses: [{ id: 'email_unverified_user', emailAddress: unverifiedEmail, verification: { status: 'unverified' } }],
-      firstName: 'Unverified', lastName: 'User'
-    });
+    mocks.verifyToken.mockResolvedValueOnce({ uid: users.unverified.id, email: unverifiedEmail, emailVerified: false, name: 'Unverified User' });
     const rejected = await asUser(users.unverified.id, { method: 'GET', url: '/api/session' });
     expect(rejected.statusCode).toBe(403);
     expect(rejected.json().code).toBe('verified_email_required');
