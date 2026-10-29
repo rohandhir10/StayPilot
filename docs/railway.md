@@ -1,77 +1,89 @@
 # Railway API + PostgreSQL setup
 
-Railway supports a private PostgreSQL service and a separate application service. A `DATABASE_URL` reference should point to the database service in the same Railway project; don't expose PostgreSQL publicly for the API to reach it. See [Railway PostgreSQL documentation](https://docs.railway.com/databases/postgresql) and [health checks](https://docs.railway.com/deployments/healthchecks).
+## Current StayPilot deployment state
 
-## 1. Create/locate the correct project
+The connected Railway project is `endearing-expression`. It contains the StayPilot API service and a private `Postgres` service. The API is connected to `rohandhir10/StayPilot` on branch `audit/fix-hardening`, with root directory `apps/api`, public service domain `https://staypilot-production-f8a6.up.railway.app`, pre-deploy command `npm run migrate:prod`, and health check `/api/health/ready`.
 
-The connected Railway project is named `endearing-expression` and contains a StayPilot API service and a PostgreSQL service. The API service is connected to `rohandhir10/StayPilot` on `audit/fix-hardening` with root directory `apps/api`. A Railway service domain is provisioned for the API. These resources still need a successful API deployment and authenticated end-to-end verification.
+The database service deployed successfully, but the most recent API deployment failed during its migration pre-deploy command. Do not treat the API as live until database TLS, migrations, Firebase credentials, health checks, and a real authenticated browser-to-API test pass.
 
-## 2. PostgreSQL service
+## 1. PostgreSQL service and private connection
 
-Create a Railway PostgreSQL service, keep it private, enable backups/PITR if the plan supports it, and attach a database connection variable to the API service using Railway's variable reference (shown in the Railway UI), e.g. `DATABASE_URL=${{Postgres.DATABASE_URL}}` where `Postgres` is the actual database service name. Use the database-provided URL; don't copy the password into source control.
+Use a Railway PostgreSQL service in the same Railway project and keep it private. The StayPilot API's `DATABASE_URL` variable references `${{Postgres.DATABASE_URL}}`. Never copy database passwords into source control or Vercel.
 
-## 3. API service
+The standard Railway Postgres image creates a self-signed certificate. This project intentionally keeps TLS certificate validation enabled, so the API must trust the database CA and use the server name in the certificate rather than turning validation off. The official image generates a CA certificate at `/var/lib/postgresql/data/certs/root.crt` and a server certificate for `localhost` (see the [template's SSL initialization script](https://github.com/railwayapp-templates/postgres-ssl/blob/main/init-ssl.sh)).
 
-Connect the correct GitHub repository to the API service. Set **Root Directory** to `apps/api` for this package layout. Configure:
+For this template, export only the public root CA certificate from the Postgres service using Railway's shell/CLI, for example:
+
+```sh
+railway ssh --service Postgres --environment production -- cat /var/lib/postgresql/data/certs/root.crt > postgres-root.crt
+```
+
+Inspect the file and confirm it contains a PEM certificate (the `-----BEGIN CERTIFICATE-----` and `-----END CERTIFICATE-----` lines). Do **not** export or share `root.key` or `server.key`. In Railway's **StayPilot API service Variables**, set `DATABASE_SSL_CA` to the full contents of `postgres-root.crt` and `DATABASE_SSL_SERVERNAME=localhost`. Then redeploy. If the template uses another certificate path, inspect its `postgresql.conf` / initialization script and use the configured CA file. Keep `DATABASE_SSL=true` and `DATABASE_SSL_REJECT_UNAUTHORIZED=true`.
+
+## 2. API service
+
+The current API service is configured as follows:
 
 | Setting | Value |
 |---|---|
-| Build command | `npm install --no-audit --no-fund && npm run build` (after `package-lock.json` is generated and committed, change to `npm ci && npm run build`) |
+| Root Directory | `apps/api` |
+| Build command | `npm install --no-audit --no-fund && npm run build` |
 | Pre-deploy command | `npm run migrate:prod` |
-| Start command | `npm start` |
+| Start command | `npm run start` |
 | Healthcheck path | `/api/health/ready` |
-| Healthcheck timeout | At least 60 seconds to allow startup/migration work |
+| Healthcheck timeout | At least 60 seconds |
 
-Migration failure must fail the deployment. Do not run destructive migrations automatically, and don't edit an already-applied migration file; add the next numbered migration instead.
+Migration failure must fail the deployment. Do not run destructive migrations automatically, and do not edit an already-applied migration file; add a new numbered migration instead.
 
-## 4. Required and optional Railway Variables
+## 3. Railway Variables
 
-Use Railway's Variables UI. Do not add real values to GitHub.
+Use the Railway Variables UI. Do not commit real values.
 
-| Variable | Required | Value / purpose |
+| Variable | Required | Purpose |
 |---|---|---|
 | `NODE_ENV` | yes | `production` |
-| `PORT` | Railway provides | Fastify listens on this port |
+| `PORT` | yes | Set to `3000` or Railway's assigned app port |
 | `HOST` | yes | `0.0.0.0` |
-| `DATABASE_URL` | yes | Reference to private PostgreSQL URL |
+| `DATABASE_URL` | yes | Reference to the private PostgreSQL URL |
 | `DATABASE_SSL` | yes | `true` in production |
-| `DATABASE_SSL_REJECT_UNAUTHORIZED` | yes | `true`; certificate verification must stay enabled |
-| `CLERK_PUBLISHABLE_KEY` | yes | Real `pk_live_…` publishable key from Clerk |
-| `CLERK_SECRET_KEY` | yes | Real `sk_live_…` secret key from Clerk; Railway only |
-| `OWNER_CLERK_USER_ID` | yes | Real `user_…` ID of the intended initial owner |
-| `WEB_ORIGINS` | yes | Comma-separated exact HTTPS origins of approved Vercel production/preview deployments; no paths/wildcard/trailing slash |
-| `TRUST_PROXY_HOPS` | not used | Fastify proxy trust is deliberately disabled. Rate limiting reads a syntactically valid `X-Real-IP` only for public-ingress bucketing; Railway's public edge overwrites this header. Private-network callers bypass that edge and must be treated as trusted workloads. |
-| `DATABASE_POOL_MAX` | recommended | `10` to start; size against Railway Postgres connection limits |
-| `RATE_LIMIT_PUBLIC_PER_HOUR` | recommended | `5` per contact email as an abuse-control starting point |
-| `RATE_LIMIT_PARTNER_PER_MINUTE` | recommended | `120` per key as a starting point |
+| `DATABASE_SSL_REJECT_UNAUTHORIZED` | yes | `true`; never disable certificate validation to work around a trust issue |
+| `DATABASE_SSL_CA` | for custom/private CA | PEM contents of the trusted root CA certificate |
+| `DATABASE_SSL_SERVERNAME` | for the stock Railway Postgres image | `localhost`, the server certificate's DNS identity |
+| `FIREBASE_PROJECT_ID` | yes for live sign-in | Firebase project ID |
+| `FIREBASE_SERVICE_ACCOUNT_JSON` | yes for live sign-in | Entire Firebase Admin service-account JSON, stored as a Railway secret only |
+| `OWNER_FIREBASE_UID` | yes for first owner | Firebase Authentication UID of the intended first workspace owner |
+| `WEB_ORIGINS` | yes | Comma-separated exact HTTPS origins; no paths, wildcards, or trailing slashes |
+| `DATABASE_POOL_MAX` | recommended | Start at `10`, adjusted to database limits |
+| `RATE_LIMIT_PUBLIC_PER_HOUR` | recommended | `5` per contact/email as an abuse-control starting point |
+| `RATE_LIMIT_PARTNER_PER_MINUTE` | recommended | `120` per API key as a starting point |
 | `WEBHOOK_BODY_LIMIT_BYTES` | recommended | `1048576` |
 | `LOG_LEVEL` | recommended | `info` |
-| `META_APP_SECRET` | only for Meta webhook | Meta app secret used to verify inbound webhook HMAC |
-| `META_WEBHOOK_VERIFY_TOKEN` | only for Meta webhook | A random high-entropy value chosen by the owner and entered in Meta and Railway; at least 24 characters |
-| `TURNSTILE_SECRET_KEY` | only for public form | Cloudflare Turnstile secret; server-only |
-| `TURNSTILE_SITE_KEY` | only for public form | Public Turnstile site key returned by the public form config endpoint |
+| `META_APP_SECRET` | only for Meta webhook | Meta app secret for HMAC verification |
+| `META_WEBHOOK_VERIFY_TOKEN` | only for Meta webhook | High-entropy token (at least 24 characters) configured in Meta and Railway |
+| `TURNSTILE_SECRET_KEY` | only for public inquiry form | Server-only Cloudflare Turnstile secret |
+| `TURNSTILE_SITE_KEY` | only for public inquiry form | Public Turnstile site key returned by the form config endpoint |
 
-`DATABASE_SSL=true` with `DATABASE_SSL_REJECT_UNAUTHORIZED=true` is required in production. If the selected Railway database endpoint's CA chain is not trusted by Node, configure a trusted CA instead of turning certificate validation off.
+If `DATABASE_SSL_CA` is not needed because the selected database has a publicly trusted CA chain, it may be omitted. Do not set `DATABASE_SSL_REJECT_UNAUTHORIZED=false` in production.
 
-## 5. Bootstrap the first owner
+## 4. Firebase Google sign-in
 
-1. Create the Clerk application and configure sign-in (see [provider setup](secrets-and-providers.md)).
-2. Create the intended owner's account in Clerk, then copy that user's real `user_…` identifier from the Clerk Dashboard.
-3. Set `OWNER_CLERK_USER_ID` in Railway and redeploy.
-4. The owner signs in through the frontend; the first authenticated API request creates the owner membership in the default workspace.
-5. The owner can create StayPilot workspace invitations and partner API keys through the API.
+1. Create/select the Firebase project, register a Web App, enable Google in **Authentication → Sign-in method**, and add the intended Vercel hostnames under **Authentication → Settings → Authorized domains**.
+2. Set the public web settings (`VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_APP_ID`) in Vercel for the intended environments.
+3. Create a Firebase Admin SDK service-account JSON key. Put the complete JSON only into Railway `FIREBASE_SERVICE_ACCOUNT_JSON`, and set `FIREBASE_PROJECT_ID` to the same project ID.
+4. Sign in with the intended owner Google account and copy its Firebase Authentication UID. Set `OWNER_FIREBASE_UID` before the first authenticated CRM request.
+5. Other users need a verified email matching an unexpired StayPilot workspace invitation.
 
-The `/api/team/invites` endpoint creates an access grant but **does not send an email**. Until an email provider/workflow is implemented, use the Clerk Dashboard or your chosen secure channel to invite the person into the Clerk application and give them the frontend sign-in URL. The API will still deny them unless the verified email matches an unexpired StayPilot invite.
+Never put the Firebase Admin JSON key in the frontend, Vercel, or GitHub. The API verifies Firebase ID tokens and then enforces StayPilot workspace membership and role permissions. A Google sign-in does not automatically grant workspace access.
 
-## 6. Deployment smoke checks
+## 5. Deployment smoke checks
 
-After deployment:
+After successful deployment:
 
 - `GET /api/health` returns `200`.
-- `GET /api/health/ready` returns `200` only when PostgreSQL is reachable and all required migrations (`0001_initial.sql` through `0004_import_idempotency.sql`) are registered.
-- `GET /api/session` without a token returns `401`; as a signed-in but uninvited user it returns `403`; as the configured owner it returns the user/workspace/role object.
-- `GET /api/leads/list` for an authorized member returns only the default workspace's inquiries.
-- `POST /api/public/inquiry` without a valid Turnstile response or affirmative consent fails closed.
-- Invalid Meta signatures fail before any message persistence.
+- `GET /api/health/ready` returns `200` only when PostgreSQL is reachable and migrations `0001` through `0004` are registered.
+- `GET /api/session` without a token returns `401`; an authenticated but uninvited user receives `403`; the configured owner can access the default workspace.
+- `GET /api/leads/list` returns only the authorized user's workspace records.
+- `POST /api/public/inquiry` fails closed without valid Turnstile verification and affirmative consent.
+- Invalid Meta webhook signatures fail before message persistence.
 
-Do not route real customers into this backend until the authentication, migration, CORS, provider and recovery steps have been verified against your actual deployed environment.
+Do not route real customers into this backend until the database CA, authentication, migrations, CORS, provider integrations, and recovery steps have been verified.
