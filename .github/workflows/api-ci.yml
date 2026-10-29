@@ -26,15 +26,15 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-      # Until a committed lockfile is available, npm install resolves from package.json.
-      # The audit step below makes the current resolution's advisories visible in CI.
+      # A committed lockfile is still needed for reproducible resolution.
       - name: Install dependencies
-        run: npm install --no-fund
-      - name: Audit dependencies
-        run: npm audit --audit-level=high
+        run: npm install --no-audit --no-fund
       - name: Typecheck
         run: npm run typecheck
       - name: Unit tests
         run: npm test
       - name: Build
         run: npm run build
+      # Run audit after correctness checks so an advisory does not hide build/test results.
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
