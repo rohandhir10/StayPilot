@@ -32,7 +32,7 @@ const users: Record<string, { id: string; email: string; role: string; active: b
 let lifecycleKeyId = '';
 let lifecycleSecret = '';
 let lifecycleLeadId = '';
-const inviteEmails = [`auth-${fixture}-viewer-invite@example.test`, `auth-${fixture}-admin-invite@example.test`, `auth-${fixture}-owner-invite@example.test`];
+const inviteEmails = [`auth-${fixture}-viewer-invite@example.test`, `auth-${fixture}-admin-invite@example.test`, `auth-${fixture}-owner-invite@example.test`, `auth-${fixture}-accepted-invite@example.test`, `auth-${fixture}-unverified-invite@example.test`];
 
 async function asUser(userId: string | null, input: { method: 'GET' | 'POST' | 'DELETE'; url: string; payload?: unknown }) {
   return app.inject({
@@ -215,6 +215,60 @@ describe('real membership and role checks (PostgreSQL integration; Clerk identit
     });
     expect(blocked.statusCode).toBe(401);
     expect(blocked.json().code).toBe('partner_key_invalid');
+  });
+  it('accepts a pending invitation only when the authenticated Clerk profile has a verified matching email', async () => {
+    const acceptedEmail = inviteEmails[3];
+    const unverifiedEmail = inviteEmails[4];
+    users.invitee = { id: `user_auth_${fixture}_invitee`, email: acceptedEmail, role: 'sales', active: true };
+    users.unverified = { id: `user_auth_${fixture}_unverified`, email: unverifiedEmail, role: 'viewer', active: false };
+
+    const invite = await asUser(users.owner.id, { method: 'POST', url: '/api/team/invites', payload: { email: acceptedEmail, role: 'sales' } });
+    expect(invite.statusCode).toBe(201);
+    mocks.getUserFromRequest.mockResolvedValueOnce({
+      id: users.invitee.id, primaryEmailAddressId: 'email_verified_invitee',
+      emailAddresses: [{ id: 'email_verified_invitee', emailAddress: acceptedEmail, verification: { status: 'verified' } }],
+      firstName: 'Invited', lastName: 'Sales User'
+    });
+    const accepted = await asUser(users.invitee.id, { method: 'GET', url: '/api/session' });
+    expect(accepted.statusCode).toBe(200);
+    expect(accepted.json().user.email).toBe(acceptedEmail);
+    expect(accepted.json().workspace.role).toBe('sales');
+    const invitationState = await pool.query(
+      'SELECT accepted_at, accepted_user_id FROM workspace_invites WHERE workspace_id=$1 AND email=$2',
+      [workspaceId, acceptedEmail]
+    );
+    expect(invitationState.rows[0].accepted_at).not.toBeNull();
+    expect(invitationState.rows[0].accepted_user_id).toBe(users.invitee.id);
+
+    const secondInvite = await asUser(users.owner.id, { method: 'POST', url: '/api/team/invites', payload: { email: unverifiedEmail, role: 'viewer' } });
+    expect(secondInvite.statusCode).toBe(201);
+    mocks.getUserFromRequest.mockResolvedValueOnce({
+      id: users.unverified.id, primaryEmailAddressId: 'email_unverified_user',
+      emailAddresses: [{ id: 'email_unverified_user', emailAddress: unverifiedEmail, verification: { status: 'unverified' } }],
+      firstName: 'Unverified', lastName: 'User'
+    });
+    const rejected = await asUser(users.unverified.id, { method: 'GET', url: '/api/session' });
+    expect(rejected.statusCode).toBe(403);
+    expect(rejected.json().code).toBe('verified_email_required');
+    const notConsumed = await pool.query(
+      'SELECT accepted_at, accepted_user_id FROM workspace_invites WHERE workspace_id=$1 AND email=$2',
+      [workspaceId, unverifiedEmail]
+    );
+    expect(notConsumed.rows[0].accepted_at).toBeNull();
+    expect(notConsumed.rows[0].accepted_user_id).toBeNull();
+  });
+
+  it('deactivates a member, immediately blocks access, then restores access on reactivation', async () => {
+    const deactivated = await asUser(users.owner.id, { method: 'POST', url: `/api/team/members/${users.sales.id}/deactivate` });
+    expect(deactivated.statusCode).toBe(200);
+    expect(deactivated.json().deactivated).toBe(true);
+    const blocked = await asUser(users.sales.id, { method: 'GET', url: '/api/session' });
+    expect(blocked.statusCode).toBe(403);
+    expect(blocked.json().code).toBe('member_disabled');
+    const restored = await asUser(users.owner.id, { method: 'POST', url: `/api/team/members/${users.sales.id}/reactivate` });
+    expect(restored.statusCode).toBe(200);
+    const workingAgain = await asUser(users.sales.id, { method: 'GET', url: '/api/session' });
+    expect(workingAgain.statusCode).toBe(200);
   });
   it('blocks inactive members until an authorized owner restores access', async () => {
     const blocked = await asUser(users.inactiveSales.id, { method: 'GET', url: '/api/session' });
