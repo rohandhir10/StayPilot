@@ -37,6 +37,7 @@ let conversationId = '';
 let metaConversationId = '';
 let metaProviderMessageId = '';
 let metaEventKey = '';
+let originalWhatsAppConnection: { external_account_id: string | null; status: string } | null = null;
 const leadIds: string[] = [];
 
 const member = {
@@ -116,6 +117,12 @@ describe('StayPilot API workflow integration (PostgreSQL)', () => {
 
   afterAll(async () => {
     await app.close();
+    if (originalWhatsAppConnection) {
+      await pool.query(
+        'UPDATE sp_channel_connections SET external_account_id=$3,status=$4,updated_at=now() WHERE workspace_id=$1 AND channel_key=$2',
+        [workspaceId, 'whatsapp', originalWhatsAppConnection.external_account_id, originalWhatsAppConnection.status]
+      );
+    }
     if (partnerKeyId) {
       await pool.query('DELETE FROM sp_partner_requests WHERE api_key_id=$1', [partnerKeyId]);
       await pool.query('DELETE FROM sp_partner_api_keys WHERE id=$1', [partnerKeyId]);
@@ -345,6 +352,30 @@ describe('StayPilot API workflow integration (PostgreSQL)', () => {
       payload: raw
     });
     expect(rejected.statusCode).toBe(401);
+
+    const unconfigured = await app.inject({
+      method: 'POST', url: '/api/webhooks/meta',
+      headers: { 'content-type': 'application/json', 'x-hub-signature-256': signature },
+      payload: raw
+    });
+    expect(unconfigured.statusCode).toBe(503);
+    expect(unconfigured.json().code).toBe('webhook_account_unconfigured');
+    const notClaimed = await pool.query(
+      "SELECT id FROM sp_webhook_events WHERE provider='meta' AND event_key=$1",
+      [metaEventKey]
+    );
+    expect(notClaimed.rows).toHaveLength(0);
+
+    const priorConnection = await pool.query<{ external_account_id: string | null; status: string }>(
+      "SELECT external_account_id,status FROM sp_channel_connections WHERE workspace_id=$1 AND channel_key='whatsapp'",
+      [workspaceId]
+    );
+    if (!priorConnection.rows[0]) throw new Error('Default WhatsApp channel connection is missing.');
+    originalWhatsAppConnection = priorConnection.rows[0];
+    await pool.query(
+      "UPDATE sp_channel_connections SET external_account_id=$2,status='pending',updated_at=now() WHERE workspace_id=$1 AND channel_key='whatsapp'",
+      [workspaceId, accountId]
+    );
 
     const first = await app.inject({
       method: 'POST', url: '/api/webhooks/meta',

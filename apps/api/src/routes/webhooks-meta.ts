@@ -150,6 +150,15 @@ export async function registerMetaWebhookRoutes(app: FastifyInstance): Promise<v
         if (!workspaceId) throw new Error('workspace_not_provisioned');
         let imported = 0;
         for (const message of messages) {
+          // Never trust the signed provider payload alone to select a customer workspace.
+          // The owner must explicitly configure the channel/account pair in channel connections.
+          const mapping = await client.query(
+            `SELECT id FROM sp_channel_connections
+             WHERE workspace_id=$1 AND channel_key=$2 AND external_account_id=$3 AND status <> 'disabled'
+             LIMIT 1 FOR SHARE`,
+            [workspaceId, message.channelKey, message.externalAccountId]
+          );
+          if (!mapping.rows[0]) throw new Error('meta_account_unconfigured');
           const result = await upsertExternalMessageWithClient(client, {
             workspaceId,
             channelKey: message.channelKey,
@@ -177,7 +186,11 @@ export async function registerMetaWebhookRoutes(app: FastifyInstance): Promise<v
       });
       noStore(reply);
       return reply.send({ received: true, imported: outcome.imported, duplicate_event: outcome.duplicate });
-    } catch {
+    } catch (error) {
+      // A misconfigured account is intentionally not recorded as processed so it can be retried after mapping.
+      if (error instanceof Error && error.message === 'meta_account_unconfigured') {
+        return fail(reply, 503, 'This Meta account is not configured for inbound intake. Configure the channel account mapping and let the provider retry.', 'webhook_account_unconfigured');
+      }
       // The transaction rolls back completely; Meta can retry the same signed delivery.
       return fail(reply, 500, 'The verified webhook could not be stored. It may be retried.', 'webhook_ingest_failed');
     }
