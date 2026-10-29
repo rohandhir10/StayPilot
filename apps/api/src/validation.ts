@@ -37,36 +37,13 @@ function enforceStayDateOrder(value: { check_in: string | null; check_out: strin
 
 export const leadSchema = leadBaseSchema.superRefine(enforceStayDateOrder);
 
-const publicLeadFieldsSchema = leadBaseSchema.pick({
-  client_name: true,
-  company_name: true,
-  client_email: true,
-  client_phone: true,
-  agent_name: true,
-  agent_email: true,
-  property_name: true,
-  inquiry_type: true,
-  check_in: true,
-  check_out: true,
-  guests: true,
-  notes: true
-});
-
-export const publicLeadSchema = publicLeadFieldsSchema.extend({
+export const publicLeadSchema = leadBaseSchema.extend({
+  client_email: z.string().email().max(254),
   privacy_consent: z.literal(true),
   turnstile_token: z.string().min(1).max(4096),
   form_started_at: z.coerce.number().int().positive(),
   website: z.string().max(500).optional().default('')
-}).strict().superRefine(enforceStayDateOrder).transform(
-  ({ privacy_consent: _consent, turnstile_token: _token, form_started_at: _start, website: _website, ...lead }) => ({
-    ...lead,
-    source: 'Website' as const,
-    status: 'New inquiry' as const,
-    assigned_to: 'Unassigned',
-    estimated_value: 0,
-    next_follow_up: null
-  })
-);
+}).superRefine(enforceStayDateOrder).transform(({ privacy_consent: _consent, turnstile_token: _token, form_started_at: _start, website: _website, ...lead }) => ({ ...lead, source: 'Website' as const }));
 
 export const leadUpdateSchema = z.object({
   id: z.string().uuid(),

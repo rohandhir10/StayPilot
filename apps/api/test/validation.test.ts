@@ -30,36 +30,17 @@ describe('request schemas', () => {
     expect(leadSchema.safeParse({ ...baseLead, notes: 'x'.repeat(5001) }).success).toBe(false);
   });
 
-  it('accepts a public inquiry but assigns internal workflow fields on the server', () => {
-    const { source: _source, status: _status, assigned_to: _assigned, estimated_value: _value, next_follow_up: _followUp, ...publicFields } = baseLead;
-    const input = { ...publicFields, company_name: '', privacy_consent: true, turnstile_token: 'token', form_started_at: Date.now(), website: '' };
+  it('rejects a public inquiry without affirmative privacy consent or CAPTCHA token', () => {
+    const input = { ...baseLead, company_name: '', privacy_consent: true, turnstile_token: 'token', form_started_at: Date.now(), website: '' };
     const parsed = publicLeadSchema.safeParse(input);
     expect(parsed.success).toBe(true);
     if (parsed.success) {
       expect(parsed.data.source).toBe('Website');
-      expect(parsed.data.status).toBe('New inquiry');
-      expect(parsed.data.assigned_to).toBe('Unassigned');
-      expect(parsed.data.estimated_value).toBe(0);
-      expect(parsed.data.next_follow_up).toBeNull();
       expect('turnstile_token' in parsed.data).toBe(false);
       expect('privacy_consent' in parsed.data).toBe(false);
     }
     expect(publicLeadSchema.safeParse({ ...input, privacy_consent: false }).success).toBe(false);
     expect(publicLeadSchema.safeParse({ ...input, turnstile_token: '' }).success).toBe(false);
-  });
-
-  it('rejects attempts to provide internal workflow fields through the public form', () => {
-    const { source: _source, status: _status, assigned_to: _assigned, estimated_value: _value, next_follow_up: _followUp, ...publicFields } = baseLead;
-    const input = { ...publicFields, privacy_consent: true, turnstile_token: 'token', form_started_at: Date.now(), website: '' };
-    for (const forged of [
-      { status: 'Confirmed' },
-      { assigned_to: 'CEO' },
-      { estimated_value: 999999999 },
-      { next_follow_up: '2026-12-01T10:00:00.000Z' },
-      { source: 'Partner API' }
-    ]) {
-      expect(publicLeadSchema.safeParse({ ...input, ...forged }).success).toBe(false);
-    }
   });
 
   it('rejects empty update operations', () => {

@@ -16,6 +16,27 @@ permissions:
 jobs:
   api:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: staypilot_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d staypilot_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/staypilot_test
+      CLERK_PUBLISHABLE_KEY: pk_test_staypilot_ci
+      CLERK_SECRET_KEY: sk_test_staypilot_ci
+      OWNER_CLERK_USER_ID: user_staypilot_ci_owner
+      WEB_ORIGINS: http://localhost:5173
     defaults:
       run:
         working-directory: apps/api
@@ -26,6 +47,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Apply schema migrations to the isolated CI database
+        run: npm run migrate
       # A package-lock.json is intentionally not fabricated; commit one after
       # running npm install in a network-enabled environment, then switch this
       # step to `npm ci` for deterministic dependency resolution.

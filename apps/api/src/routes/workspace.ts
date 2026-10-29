@@ -56,7 +56,8 @@ export async function registerWorkspaceRoutes(app: FastifyInstance): Promise<voi
            VALUES ($1,$2,$3,$4,now() + interval '7 days',NULL,NULL,NULL,now())
            ON CONFLICT (workspace_id, email) DO UPDATE SET role=EXCLUDED.role, invited_by_user_id=EXCLUDED.invited_by_user_id,
              expires_at=EXCLUDED.expires_at, accepted_at=NULL, accepted_user_id=NULL, revoked_at=NULL, updated_at=now()
-           WHERE workspace_invites.accepted_at IS NULL OR workspace_invites.revoked_at IS NOT NULL OR workspace_invites.expires_at <= now()
+           WHERE workspace_invites.accepted_at IS NULL
+             AND (workspace_invites.revoked_at IS NOT NULL OR workspace_invites.expires_at <= now())
            RETURNING id, email, role, expires_at, created_at`,
           [member.workspace_id, parsed.data.email, parsed.data.role, member.user_id]
         );
