@@ -3,9 +3,13 @@ import { apiRequest } from './lib/api.js';
 
 const CLERK_PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 const $=s=>document.querySelector(s);const $$=s=>[...document.querySelectorAll(s)];
-if (!CLERK_PUBLISHABLE_KEY) {
-  document.body.innerHTML = '<main style="max-width:680px;margin:12vh auto;padding:32px;font:16px/1.6 system-ui;color:#203047"><h1>StayPilot needs configuration</h1><p>Set <code>VITE_CLERK_PUBLISHABLE_KEY</code> and <code>VITE_API_BASE_URL</code> in your local environment or Vercel project settings, then rebuild.</p></main>';
-  throw new Error('Missing VITE_CLERK_PUBLISHABLE_KEY');
+const missingConfig = [
+  !CLERK_PUBLISHABLE_KEY ? 'VITE_CLERK_PUBLISHABLE_KEY' : null,
+  import.meta.env.PROD && !import.meta.env.VITE_API_BASE_URL ? 'VITE_API_BASE_URL' : null
+].filter(Boolean);
+if (missingConfig.length) {
+  document.body.innerHTML = '<main style="max-width:680px;margin:12vh auto;padding:32px;font:16px/1.6 system-ui;color:#203047"><h1>StayPilot needs configuration</h1><p>Set ' + missingConfig.map(name => '<code>' + name + '</code>').join(' and ') + ' in your local environment or Vercel project settings, then rebuild.</p></main>';
+  throw new Error('Missing required frontend configuration: ' + missingConfig.join(', '));
 }
 async function loadClerkUi(publishableKey) {
   const encodedDomain = publishableKey.split('_')[2];
