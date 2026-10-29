@@ -54,6 +54,13 @@ jobs:
       # Lockfile generation remains follow-up work until a generated lockfile is committed.
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+      - name: Export generated package lockfile for a reproducible dependency pin
+        uses: actions/upload-artifact@v4
+        with:
+          name: staypilot-api-package-lockfile
+          path: apps/api/package-lock.json
+          if-no-files-found: error
+          retention-days: 1
       - name: Apply schema migrations concurrently to exercise deployment locking
         run: |
           npm run migrate &
