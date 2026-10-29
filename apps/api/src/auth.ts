@@ -119,11 +119,11 @@ export async function requireWorkspaceMember(
     }
   }
 
-  if (result.rows.length !== 1) {
+  const member = result.rows[0];
+  if (result.rows.length !== 1 || !member) {
     fail(reply, 403, 'This account is not a member of the StayPilot workspace.', 'workspace_membership_required');
     return null;
   }
-  const member = result.rows[0];
   if (!member.is_active) {
     fail(reply, 403, 'Your StayPilot access has been disabled.', 'member_disabled');
     return null;
