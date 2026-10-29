@@ -33,9 +33,6 @@ jobs:
     env:
       NODE_ENV: test
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/staypilot_test
-      CLERK_PUBLISHABLE_KEY: pk_test_staypilot_ci
-      CLERK_SECRET_KEY: sk_test_staypilot_ci
-      OWNER_CLERK_USER_ID: user_staypilot_ci_owner
       WEB_ORIGINS: http://localhost:5173
       TURNSTILE_SECRET_KEY: ci-only-turnstile-secret
       TURNSTILE_SITE_KEY: ci-only-turnstile-site-key
@@ -70,7 +67,7 @@ jobs:
           wait "$first"
           wait "$second"
       - name: Verify migration ledger and schema version
-        run: node --input-type=module -e "import pg from 'pg'; const db=new pg.Pool({connectionString:process.env.DATABASE_URL}); const r=await db.query('SELECT name FROM schema_migrations ORDER BY name'); console.log(r.rows); if(!r.rows.some(x=>x.name==='0004_import_idempotency.sql')) process.exitCode=1; await db.end();"
+        run: node --input-type=module -e "import pg from 'pg'; const db=new pg.Pool({connectionString:process.env.DATABASE_URL}); const r=await db.query('SELECT name FROM schema_migrations ORDER BY name'); console.log(r.rows); const required=['0004_import_idempotency.sql','0005_sales_workflows.sql']; if(required.some(name=>!r.rows.some(x=>x.name===name))) process.exitCode=1; await db.end();"
       - name: Typecheck
         run: npm run typecheck
       - name: Unit tests
