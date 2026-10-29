@@ -12,10 +12,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@clerk/clerk-js": "^5.60.0",
     "firebase": "^11.10.0"
   },
   "devDependencies": {
-    "vite": "^6.4.1"
+    "vite": "^6.3.5"
   }
 }
