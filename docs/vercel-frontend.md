@@ -38,3 +38,12 @@ Set Railway `WEB_ORIGINS` to the exact scheme + host of each approved origin. Av
 ## Deployment verification boundary
 
 A successful Vercel static build does not prove that Google sign-in, Firebase token verification, database migrations, CORS, invitations, or Turnstile work end to end. Real Firebase web config and the Admin service-account JSON must come from the Firebase project owner. Do not commit them.
+
+
+## Troubleshooting: existing preview still says “StayPilot needs configuration”
+
+That message is from an older, already-built Clerk frontend. The source on `audit/fix-hardening` has been migrated to Firebase Auth and includes a read-only preview mode. Vercel environment changes do not alter an existing deployment; Vercel must build the latest branch after these changes.
+
+The connected Vercel API available during this task returned permission errors for preview deployment creation and project creation, so a new deployment could not be triggered through that connection. In Vercel, connect the `rohandhir10/StayPilot` Git repository to the frontend project (or restore deploy permissions), keep the root directory at `apps/web`, and deploy branch `audit/fix-hardening` as a **Preview**, not Production. The project already has `VITE_PREVIEW_MODE=true` scoped to Preview. That build should show explicitly labeled sample inquiries in read-only mode without Clerk or Firebase values. Do not reuse the old immutable deployment URL to verify the new source.
+
+Live Google sign-in remains separate from the read-only preview and requires the real Firebase Web App config in Vercel plus the Firebase Admin service-account JSON and owner UID in Railway.
