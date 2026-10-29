@@ -19,9 +19,9 @@ const schema = z.object({
   DATABASE_POOL_MAX: integerFromEnv(10, 1, 50),
   DATABASE_SSL: booleanValue.default(false),
   DATABASE_SSL_REJECT_UNAUTHORIZED: booleanValue.default(true),
-  CLERK_PUBLISHABLE_KEY: z.string().min(1),
-  CLERK_SECRET_KEY: z.string().min(1),
-  OWNER_CLERK_USER_ID: z.preprocess(value => value === '' ? undefined : value, z.string().min(1).optional()),
+  FIREBASE_PROJECT_ID: z.preprocess(value => value === '' ? undefined : value, z.string().min(1).optional()),
+  FIREBASE_SERVICE_ACCOUNT_JSON: z.preprocess(value => value === '' ? undefined : value, z.string().min(1).optional()),
+  OWNER_FIREBASE_UID: z.preprocess(value => value === '' ? undefined : value, z.string().min(1).max(128).optional()),
   WEB_ORIGINS: z.string().min(1),
   META_APP_SECRET: z.preprocess(value => value === '' ? undefined : value, z.string().min(1).optional()),
   META_WEBHOOK_VERIFY_TOKEN: z.preprocess(value => value === '' ? undefined : value, z.string().min(24).optional()),
@@ -52,11 +52,9 @@ if (parsed.data.NODE_ENV === 'production') {
   if (!parsed.data.DATABASE_SSL) {
     throw new Error('DATABASE_SSL=true is required in production; use a database TLS connection with certificate verification enabled.');
   }
-  if (!parsed.data.OWNER_CLERK_USER_ID || !parsed.data.OWNER_CLERK_USER_ID.startsWith('user_') || parsed.data.OWNER_CLERK_USER_ID.includes('REPLACE')) {
-    throw new Error('OWNER_CLERK_USER_ID must be the real Clerk user ID of the intended workspace owner.');
-  }
-  if (!parsed.data.CLERK_PUBLISHABLE_KEY.startsWith('pk_live_') || !parsed.data.CLERK_SECRET_KEY.startsWith('sk_live_')) {
-    throw new Error('Production requires live Clerk publishable/secret keys. Development test keys are not allowed in NODE_ENV=production.');
+  const authSettingsProvided = Boolean(parsed.data.FIREBASE_PROJECT_ID || parsed.data.FIREBASE_SERVICE_ACCOUNT_JSON || parsed.data.OWNER_FIREBASE_UID);
+  if (authSettingsProvided && (!parsed.data.FIREBASE_PROJECT_ID || !parsed.data.FIREBASE_SERVICE_ACCOUNT_JSON || !parsed.data.OWNER_FIREBASE_UID)) {
+    throw new Error('Firebase auth configuration must include FIREBASE_PROJECT_ID, FIREBASE_SERVICE_ACCOUNT_JSON, and OWNER_FIREBASE_UID together.');
   }
   if (parsed.data.DATABASE_SSL && !parsed.data.DATABASE_SSL_REJECT_UNAUTHORIZED) {
     throw new Error('Production database TLS certificate verification must remain enabled.');
@@ -71,9 +69,9 @@ export const env = Object.freeze({
   databaseUrl: parsed.data.DATABASE_URL,
   databasePoolMax: parsed.data.DATABASE_POOL_MAX,
   databaseSsl: parsed.data.DATABASE_SSL ? { rejectUnauthorized: parsed.data.DATABASE_SSL_REJECT_UNAUTHORIZED } : false,
-  clerkPublishableKey: parsed.data.CLERK_PUBLISHABLE_KEY,
-  clerkSecretKey: parsed.data.CLERK_SECRET_KEY,
-  ownerClerkUserId: parsed.data.OWNER_CLERK_USER_ID,
+  firebaseProjectId: parsed.data.FIREBASE_PROJECT_ID,
+  firebaseServiceAccountJson: parsed.data.FIREBASE_SERVICE_ACCOUNT_JSON,
+  ownerFirebaseUid: parsed.data.OWNER_FIREBASE_UID,
   webOrigins: parsed.data.WEB_ORIGINS.split(',').map(s => s.trim()).filter(Boolean),
   metaAppSecret: parsed.data.META_APP_SECRET,
   metaWebhookVerifyToken: parsed.data.META_WEBHOOK_VERIFY_TOKEN,
