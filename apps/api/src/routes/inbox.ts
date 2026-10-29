@@ -197,7 +197,7 @@ export async function registerInboxRoutes(app: FastifyInstance): Promise<void> {
                AND EXISTS (
                  SELECT 1 FROM sp_channel_messages m
                  WHERE m.workspace_id=e.workspace_id AND m.conversation_id=$3 AND m.direction='inbound'
-                   AND COALESCE(m.provider_created_at, m.created_at) > e.started_at
+                   AND m.created_at > e.started_at
                )
              RETURNING e.id`,
             [member.workspace_id, parsed.data.lead_id, parsed.data.conversation_id]
