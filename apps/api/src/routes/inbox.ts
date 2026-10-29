@@ -189,6 +189,41 @@ export async function registerInboxRoutes(app: FastifyInstance): Promise<void> {
           if (!lead.rows.length) return 'lead_missing' as const;
         }
         await client.query('UPDATE sp_conversations SET linked_lead_id=$1, updated_at=now() WHERE id=$2 AND workspace_id=$3', [parsed.data.lead_id, parsed.data.conversation_id, member.workspace_id]);
+        if (parsed.data.lead_id) {
+          const paused = await client.query(
+            `UPDATE sp_sales_workflow_enrollments e
+             SET status='paused', pause_reason='customer_reply', next_action_at=NULL, updated_at=now()
+             WHERE e.workspace_id=$1 AND e.lead_id=$2 AND e.status='active'
+               AND EXISTS (
+                 SELECT 1 FROM sp_channel_messages m
+                 WHERE m.workspace_id=e.workspace_id AND m.conversation_id=$3 AND m.direction='inbound'
+                   AND COALESCE(m.provider_created_at, m.created_at) > e.started_at
+               )
+             RETURNING e.id`,
+            [member.workspace_id, parsed.data.lead_id, parsed.data.conversation_id]
+          );
+          if (paused.rows.length) {
+            await client.query(
+              'UPDATE leads SET next_follow_up=NULL, updated_at=now() WHERE workspace_id=$1 AND id=$2',
+              [member.workspace_id, parsed.data.lead_id]
+            );
+            await client.query(
+              `INSERT INTO lead_activities (workspace_id, lead_id, activity_type, description, actor)
+               VALUES ($1,$2,'workflow_paused_on_reply','Sales workflow paused because the linked conversation already contains a newer inbound customer message.','StayPilot')`,
+              [member.workspace_id, parsed.data.lead_id]
+            );
+            for (const enrollment of paused.rows) {
+              await auditEvent(client, {
+                workspaceId: member.workspace_id,
+                actor: member,
+                action: 'workflow.paused_on_reply',
+                entityType: 'workflow_enrollment',
+                entityId: enrollment.id,
+                metadata: { lead_id: parsed.data.lead_id, conversation_id: parsed.data.conversation_id }
+              });
+            }
+          }
+        }
         await auditEvent(client, { workspaceId: member.workspace_id, actor: member, action: 'inbox.conversation_linked', entityType: 'conversation', entityId: parsed.data.conversation_id, metadata: { linked_lead_id: parsed.data.lead_id } });
         return 'ok' as const;
       });
