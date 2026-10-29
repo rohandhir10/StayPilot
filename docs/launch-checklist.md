@@ -4,10 +4,10 @@
 
 - [ ] Confirm GitHub repository visibility is intentional; the current repository setting is public. Do not store real credentials or customer data in source control.
 - [ ] Configure Railway Root Directory as `apps/api`, create/attach private PostgreSQL, set required variables, set pre-deploy migration and `/api/health/ready`, then verify the API is online before testing the frontend.
-- [ ] Locate/connect the actual Vercel frontend source and set its API origin and Clerk public key. The current repository contains backend code only and no connected Vercel project was found.
+- [ ] Configure Vercel Root Directory as `apps/web`; set `VITE_API_BASE_URL` and `VITE_CLERK_PUBLISHABLE_KEY`, then redeploy.
 
-- [ ] Locate the actual StayPilot frontend repo and integrate the shared API client; never put backend secrets in frontend code.
-- [ ] Generate and commit `apps/api/package-lock.json` (the current CI artifact is temporary), then use `npm ci` in CI/build.
+- [ ] Verify the ported reference UI on desktop/mobile, including sign-in, overview, inquiry create/update, duplicate review, inbox notes/linking, channels and CSV/JSON import. Never put backend secrets in frontend code.
+- [ ] Generate and commit both `apps/api/package-lock.json` and `apps/web/package-lock.json` (current CI artifacts are temporary), then use `npm ci` in CI/build.
 - [ ] Keep GitHub Actions green for TypeScript typecheck, PostgreSQL integration tests and build; latest verified run passed 9 test files / 50 tests on the audit branch, but this is not a live production smoke test.
 - [ ] Provision Clerk, create the initial owner, set `OWNER_CLERK_USER_ID`, and confirm an uninvited account gets `403` while the owner gets access.
 - [ ] Provision Railway PostgreSQL; set `DATABASE_SSL=true` and keep certificate validation enabled. Apply migrations via Railway pre-deploy command.
