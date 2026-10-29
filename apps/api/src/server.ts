@@ -18,6 +18,8 @@ import { registerPublicInquiryRoutes } from './routes/public-inquiry.js';
 import { registerImportRoutes } from './routes/import.js';
 import { registerMetaWebhookRoutes } from './routes/webhooks-meta.js';
 import { registerActionCentreRoutes } from './routes/action-centre.js';
+import { registerMailOAuthRoutes } from './routes/mail-oauth.js';
+import { registerMailSyncRoutes } from './routes/mail-sync.js';
 
 const app = Fastify({
   logger: {
@@ -103,6 +105,8 @@ await registerPublicInquiryRoutes(app);
 await registerImportRoutes(app);
 await registerMetaWebhookRoutes(app);
 await registerActionCentreRoutes(app);
+await registerMailOAuthRoutes(app);
+await registerMailSyncRoutes(app);
 
 try {
   await checkDatabase();
