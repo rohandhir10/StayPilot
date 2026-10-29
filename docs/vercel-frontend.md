@@ -28,3 +28,17 @@ Set Railway `WEB_ORIGINS` to the exact scheme + host of each approved production
 ## Deployment verification boundary
 
 A successful Vercel static build does not confirm that the Railway API is online, CORS is correct, Clerk sessions are accepted, an invitation grants workspace access, or the Turnstile hostname is approved. Test those flows after configuring both services. External reply sending and mailbox sync remain deliberately unavailable in this release.
+
+
+## Troubleshooting: `500 FUNCTION_INVOCATION_FAILED` from `apps/api/src/config.ts`
+
+If the root page returns a server-side 500 and the function log reports missing `DATABASE_URL`, `CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY` and `WEB_ORIGINS`, Vercel is executing the API application as a function instead of serving the Vite frontend. Do **not** solve this by copying the API's private secrets into Vercel.
+
+For the `stay-pilot` Vercel project, the project build settings have been changed to Vite with Root Directory `apps/web`, build command `npm run build`, install command `npm install --no-audit --no-fund`, and output directory `dist`. The existing deployment was not redeployed as part of the configuration change; a fresh preview build is needed to verify the new settings.
+
+The Vercel project currently has **no environment variables configured**. Before the dashboard can sign in or call a live API, add:
+
+- `VITE_CLERK_PUBLISHABLE_KEY`: the public key from the real Clerk application.
+- `VITE_API_BASE_URL`: the HTTPS origin for the deployed Railway API (the client accepts an origin with or without the `/api` suffix).
+
+Do not set `DATABASE_URL` or `CLERK_SECRET_KEY` in the frontend project. Those belong in the backend service's secret settings. Railway must have a private PostgreSQL database, the required backend variables, and an HTTPS API domain before an end-to-end test can pass.
