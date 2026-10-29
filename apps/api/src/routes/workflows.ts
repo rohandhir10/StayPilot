@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import type pg from 'pg';
 import { inTransaction, pool } from '../db.js';
 import { requireWorkspaceMember, type MemberRole } from '../auth.js';
 import { auditEvent } from '../domain.js';
@@ -85,7 +86,7 @@ function taskFor(enrollmentId: string, workspaceId: string, leadId: string, step
   return { enrollmentId, workspaceId, leadId, step, stepNumber, scheduledAt };
 }
 
-async function insertTask(client: any, input: ReturnType<typeof taskFor>) {
+async function insertTask(client: pg.PoolClient, input: ReturnType<typeof taskFor>) {
   const result = await client.query(
     `INSERT INTO sp_sales_workflow_tasks
        (workspace_id, enrollment_id, lead_id, step_number, step_key, title, instructions, scheduled_at)
@@ -252,7 +253,7 @@ export async function registerWorkflowRoutes(app: FastifyInstance): Promise<void
     const parsed = workflowTaskCompleteSchema.safeParse(request.body);
     if (!parsed.success) return fail(reply, 400, parsed.error.issues[0]?.message || 'Task details are invalid.', 'invalid_workflow_task');
     try {
-      const outcome = await (await import('../db.js')).inTransaction(async client => {
+      const outcome = await inTransaction(async client => {
         const result = await client.query(
           `SELECT t.id AS task_id, t.workspace_id, t.enrollment_id, t.lead_id, t.step_number, t.status AS task_status,
                   e.sequence_key, e.status AS enrollment_status, e.current_step,
@@ -355,7 +356,7 @@ export async function registerWorkflowRoutes(app: FastifyInstance): Promise<void
     const parsed = workflowEnrollmentActionSchema.safeParse(request.body);
     if (!parsed.success) return fail(reply, 400, parsed.error.issues[0]?.message || 'Workflow action is invalid.', 'invalid_workflow_action');
     try {
-      const outcome = await (await import('../db.js')).inTransaction(async client => {
+      const outcome = await inTransaction(async client => {
         const result = await client.query(
           `SELECT e.id, e.lead_id, e.sequence_key, e.status, e.current_step, e.pause_reason, l.status AS lead_status
            FROM sp_sales_workflow_enrollments e
