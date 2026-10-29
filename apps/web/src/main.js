@@ -235,7 +235,7 @@ async function renderChannelWorkspace(view){
   $("#sync-mailboxes").addEventListener("click",async()=>{
    const button=$("#sync-mailboxes");if(!workspaceSession||!["owner","admin","sales"].includes(workspaceSession.workspace?.role)){toast("Your role cannot sync connected mailboxes.",true);return;}
    button.disabled=true;button.textContent="Syncing…";
-   try{const d=await api("/integrations/sync",{method:"POST",body:JSON.stringify({})});toast("Mailbox sync finished. Imported "+Number(d.imported||0)+" new messages.");await refresh();}
+   try{const d=await api("/integrations/sync",{method:"POST",body:JSON.stringify({})});toast("Mailbox sync finished. Imported "+Number(d.imported_total??d.imported??0)+" new messages."+(d.ok===false?" Some connected mailboxes need attention.":""),d.ok===false);await refresh();}
    catch(error){toast("Mailbox sync failed: "+error.message,true);}
    finally{button.disabled=false;button.textContent="Sync connected mailboxes";}
   });
