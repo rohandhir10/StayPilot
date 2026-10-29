@@ -13,6 +13,7 @@ import { registerLeadRoutes } from './routes/leads.js';
 import { registerInboxRoutes } from './routes/inbox.js';
 import { registerChannelRoutes } from './routes/channels.js';
 import { registerIntegrationRoutes } from './routes/integrations.js';
+import { registerEmailOAuthRoutes } from './routes/email-oauth.js';
 import { registerPartnerRoutes } from './routes/partner.js';
 import { registerPublicInquiryRoutes } from './routes/public-inquiry.js';
 import { registerImportRoutes } from './routes/import.js';
@@ -42,7 +43,7 @@ await app.register(cors, {
   allowedHeaders: ['Authorization', 'Content-Type', 'Idempotency-Key', 'X-Hub-Signature-256'],
   exposedHeaders: ['Retry-After', 'X-Request-Id'],
   origin(origin, callback) {
-    if (!origin) return callback(null, true); // CLI/server-to-server; auth remains required on private routes.
+    if (!origin) return callback(null, true);
     return callback(null, env.webOrigins.includes(origin));
   }
 });
@@ -75,7 +76,6 @@ app.setNotFoundHandler((_request, reply) => reply.code(404).send({ error: 'Endpo
 app.setErrorHandler((error, request, reply) => {
   const status = Number.isInteger(error.statusCode) && error.statusCode! >= 400 && error.statusCode! < 600 ? error.statusCode! : 500;
   if (status >= 500) {
-    // Do not log the request body or raw webhook/signature values. Keep a request ID for correlation.
     request.log.error({ requestId: request.id, errorCode: (error as NodeJS.ErrnoException).code || 'internal_error' }, 'request failed');
     return reply.code(500).send({ error: 'An unexpected error occurred.', code: 'internal_error', request_id: request.id });
   }
@@ -89,6 +89,7 @@ await registerLeadRoutes(app);
 await registerInboxRoutes(app);
 await registerChannelRoutes(app);
 await registerIntegrationRoutes(app);
+await registerEmailOAuthRoutes(app);
 await registerPartnerRoutes(app);
 await registerPublicInquiryRoutes(app);
 await registerImportRoutes(app);
