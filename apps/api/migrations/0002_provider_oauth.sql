@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS sp_oauth_states (
   provider TEXT NOT NULL CHECK (provider IN ('google','microsoft')),
   channel_key TEXT NOT NULL CHECK (channel_key IN ('email_gmail','email_outlook')),
   initiated_by_user_id TEXT NOT NULL,
+  code_verifier_ciphertext TEXT NOT NULL,
   expires_at TIMESTAMPTZ NOT NULL DEFAULT (now() + interval '10 minutes'),
   consumed_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
