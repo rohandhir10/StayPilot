@@ -101,7 +101,8 @@ export async function registerLeadRoutes(app: FastifyInstance): Promise<void> {
         if (!current) return null;
         const status = input.status ?? current.status;
         const assignedTo = input.assigned_to === undefined ? current.assigned_to : (input.assigned_to || 'Unassigned');
-        const nextFollowUp = input.next_follow_up === undefined ? current.next_follow_up : input.next_follow_up;
+        const isClosed = status === 'Confirmed' || status === 'Lost';
+        const nextFollowUp = isClosed ? null : (input.next_follow_up === undefined ? current.next_follow_up : input.next_follow_up);
         const notes = input.notes === undefined ? current.notes : input.notes;
         const result = await client.query(
           `UPDATE leads SET status=$1, assigned_to=$2, next_follow_up=$3, notes=$4,
@@ -113,6 +114,21 @@ export async function registerLeadRoutes(app: FastifyInstance): Promise<void> {
           [status, assignedTo, nextFollowUp, notes, input.status === 'Contacted', input.id, member.workspace_id]
         );
         if (!result.rows[0]) return null;
+        if (isClosed) {
+          const stopReason = status === 'Confirmed' ? 'lead_confirmed' : 'lead_lost';
+          await client.query(
+            `UPDATE sp_sales_workflow_enrollments
+             SET status='stopped', stop_reason=$1, pause_reason=NULL,
+                 next_action_at=NULL, stopped_at=now(), updated_at=now()
+             WHERE workspace_id=$2 AND lead_id=$3 AND status IN ('active','paused')`,
+            [stopReason, member.workspace_id, input.id]
+          );
+          await client.query(
+            `UPDATE sp_sales_workflow_tasks SET status='cancelled', updated_at=now()
+             WHERE workspace_id=$1 AND lead_id=$2 AND status='scheduled'`,
+            [member.workspace_id, input.id]
+          );
+        }
         await client.query(
           `INSERT INTO lead_activities (workspace_id, lead_id, activity_type, description, actor_user_id, actor_email, actor)
            VALUES ($1,$2,'updated',$3,$4,$5,$6)`,
