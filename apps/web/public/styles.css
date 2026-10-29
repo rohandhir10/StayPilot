@@ -94,3 +94,22 @@
 @media(max-width:1180px){.wf-layout{grid-template-columns:minmax(220px,270px) minmax(0,1fr)}.wf-workarea{padding:17px}.wf-fact-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:900px){.wf-layout{grid-template-columns:1fr}.wf-queue-list{grid-template-columns:repeat(2,minmax(0,1fr))}.wf-workarea{padding:16px}}
 @media(max-width:620px){.wf-summary{grid-template-columns:1fr}.wf-queue-list{grid-template-columns:1fr}.wf-fact-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.wf-actions,.wf-reminder{align-items:stretch;width:100%}.wf-reminder input,.wf-reminder button{width:100%}.wf-section-head{align-items:flex-start;flex-direction:column}.wf-section-head select{max-width:100%;width:100%}.wf-record-head{flex-direction:column}}
+
+
+/* Persisted hotel-sales sequence controls */
+.wf-sequence-panel{margin:16px 0 20px;padding:15px 16px;border:1px solid #dfe7f2;background:#f8faff;border-radius:9px}
+.wf-sequence-panel>div:first-child>b,.wf-sequence-panel>div:first-child>b{color:#2c3d54}
+.wf-sequence-panel>div:first-child p,.wf-sequence-note{margin:6px 0 0;color:#718095;font-size:10px;line-height:1.65}
+.wf-sequence-panel>button{margin-top:11px}
+.wf-sequence-warning{border-color:#ead5ad;background:#fffbf2}
+.wf-sequence-title{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.wf-sequence-title small{display:block;color:#9a7a48;font-size:9px;letter-spacing:1.2px;font-weight:800;margin-bottom:5px}
+.wf-sequence-title b{display:block;font:700 13px Manrope;color:#2a3b52}
+.wf-current-task{margin-top:13px;padding:12px 13px;background:#fff;border:1px solid #e4eaf3;border-radius:7px}
+.wf-current-task small{display:block;color:#8a96a5;font-size:9px;line-height:1.6;letter-spacing:.3px}
+.wf-current-task b{display:block;color:#2d4059;font-size:12px;margin-top:5px}
+.wf-current-task p{margin:7px 0 0;color:#697990;font-size:10px;line-height:1.7}
+.wf-sequence-note{margin-top:10px;color:#85662e}
+.wf-sequence-actions{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}
+.wf-sequence-actions .btn{min-height:32px}
+@media(max-width:620px){.wf-sequence-panel{padding:12px}.wf-sequence-title{align-items:flex-start}.wf-sequence-actions{display:grid;grid-template-columns:1fr 1fr}.wf-sequence-actions .btn{white-space:normal;height:auto;min-height:38px;line-height:1.4;padding:8px}}
