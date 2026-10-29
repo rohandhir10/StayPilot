@@ -17,6 +17,7 @@ import { registerIntegrationRoutes } from './routes/integrations.js';
 import { registerPartnerRoutes } from './routes/partner.js';
 import { registerPublicInquiryRoutes } from './routes/public-inquiry.js';
 import { registerImportRoutes } from './routes/import.js';
+import { registerWorkflowRoutes } from './routes/workflows.js';
 import { registerMetaWebhookRoutes } from './routes/webhooks-meta.js';
 
 const app = Fastify({
@@ -99,6 +100,7 @@ await registerIntegrationRoutes(app);
 await registerPartnerRoutes(app);
 await registerPublicInquiryRoutes(app);
 await registerImportRoutes(app);
+await registerWorkflowRoutes(app);
 await registerMetaWebhookRoutes(app);
 
 try {
