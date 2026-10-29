@@ -1,5 +1,6 @@
 const configuredBase = import.meta.env.VITE_API_BASE_URL || "";
-const API_BASE = configuredBase.replace(/\/$/, "");
+const API_BASE = configuredBase.replace(/\/+$/, "");
+const API_ROOT = API_BASE.endsWith("/api") ? API_BASE : API_BASE + "/api";
 
 export async function apiRequest(path, options = {}) {
   if (!API_BASE) {
@@ -10,7 +11,14 @@ export async function apiRequest(path, options = {}) {
   if (options.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
   if (options.token) headers.set("Authorization", `Bearer ${options.token}`);
 
-  const response = await fetch(`${API_BASE}${path.startsWith("/") ? path : `/${path}`}`, {
+  const normalizedPath = String(path || "");
+  const routePath = normalizedPath.startsWith("/api/")
+    ? normalizedPath.slice(4)
+    : normalizedPath.startsWith("/")
+      ? normalizedPath
+      : `/${normalizedPath}`;
+
+  const response = await fetch(`${API_ROOT}${routePath}`, {
     method: options.method || "GET",
     headers,
     body: options.body,
