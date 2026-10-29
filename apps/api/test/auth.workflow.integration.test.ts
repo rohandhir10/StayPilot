@@ -19,14 +19,18 @@ import { pool } from '../src/db.js';
 import { registerWorkspaceRoutes } from '../src/routes/workspace.js';
 import { registerLeadRoutes } from '../src/routes/leads.js';
 import { registerIntegrationRoutes } from '../src/routes/integrations.js';
+import { registerPartnerRoutes } from '../src/routes/partner.js';
 
 const app = Fastify();
 const fixture = randomUUID().replaceAll('-', '').slice(0, 12);
 let workspaceId = '';
 const users: Record<string, { id: string; email: string; role: string; active: boolean }> = {};
+let lifecycleKeyId = '';
+let lifecycleSecret = '';
+let lifecycleLeadId = '';
 const inviteEmails = [`auth-${fixture}-viewer-invite@example.test`, `auth-${fixture}-admin-invite@example.test`, `auth-${fixture}-owner-invite@example.test`];
 
-async function asUser(userId: string | null, input: { method: 'GET' | 'POST'; url: string; payload?: unknown }) {
+async function asUser(userId: string | null, input: { method: 'GET' | 'POST' | 'DELETE'; url: string; payload?: unknown }) {
   return app.inject({
     ...input,
     headers: userId ? { 'x-test-clerk-user': userId } : {},
@@ -60,11 +64,20 @@ describe('real membership and role checks (PostgreSQL integration; Clerk identit
     await registerWorkspaceRoutes(app);
     await registerLeadRoutes(app);
     await registerIntegrationRoutes(app);
+    await registerPartnerRoutes(app);
     await app.ready();
   });
 
   afterAll(async () => {
     await app.close();
+    if (lifecycleKeyId) {
+      await pool.query('DELETE FROM sp_partner_requests WHERE api_key_id=$1', [lifecycleKeyId]);
+    }
+    if (lifecycleLeadId) {
+      await pool.query('DELETE FROM sp_audit_events WHERE workspace_id=$1 AND entity_id::text=$2', [workspaceId, lifecycleLeadId]);
+      await pool.query('DELETE FROM leads WHERE workspace_id=$1 AND id=$2', [workspaceId, lifecycleLeadId]);
+    }
+    if (lifecycleKeyId) await pool.query('DELETE FROM sp_partner_api_keys WHERE id=$1', [lifecycleKeyId]);
     await pool.query('DELETE FROM workspace_invites WHERE workspace_id=$1 AND email=ANY($2::text[])', [workspaceId, inviteEmails]);
     await pool.query('DELETE FROM sp_audit_events WHERE workspace_id=$1 AND actor_user_id=ANY($2::text[])', [workspaceId, Object.values(users).map(user => user.id)]);
     await pool.query('DELETE FROM workspace_members WHERE workspace_id=$1 AND user_id=ANY($2::text[])', [workspaceId, Object.values(users).map(user => user.id)]);
@@ -97,6 +110,47 @@ describe('real membership and role checks (PostgreSQL integration; Clerk identit
     expect(ownerPromote.json().delivery).toBe('not_sent');
   });
 
+  it('tests partner key creation, one-time secret handling, inquiry intake and revocation end to end', async () => {
+    const createdKey = await asUser(users.owner.id, { method: 'POST', url: '/api/integrations/keys', payload: { name: `Lifecycle ${fixture}` } });
+    expect(createdKey.statusCode).toBe(201);
+    lifecycleKeyId = createdKey.json().key.id;
+    lifecycleSecret = createdKey.json().secret;
+    expect(lifecycleSecret).toMatch(/^sp_live_[a-f0-9]{64}$/);
+
+    const listed = await asUser(users.owner.id, { method: 'GET', url: '/api/integrations/keys' });
+    expect(listed.statusCode).toBe(200);
+    expect(listed.json().keys.some((key: { id: string; is_active: boolean }) => key.id === lifecycleKeyId && key.is_active)).toBe(true);
+    expect(JSON.stringify(listed.json())).not.toContain(lifecycleSecret);
+    expect(JSON.stringify(listed.json())).not.toContain('key_hash');
+
+    const payload = {
+      client_name: `Lifecycle Guest ${fixture}`,
+      company_name: `Lifecycle Company ${fixture}`,
+      client_email: `lifecycle-${fixture}@example.test`,
+      client_phone: '',
+      property_name: 'Lifecycle Test Hotel',
+      inquiry_type: 'Corporate stay',
+      check_in: '2026-12-10',
+      check_out: '2026-12-12',
+      guests: 2,
+      notes: 'Created via a freshly issued partner API key'
+    };
+    const headers = { authorization: `Bearer ${lifecycleSecret}`, 'idempotency-key': `lifecycle-${fixture}-key-001` };
+    const accepted = await app.inject({ method: 'POST', url: '/api/partner/inquiries', headers, payload });
+    expect(accepted.statusCode).toBe(201);
+    lifecycleLeadId = accepted.json().lead_id;
+
+    const revoked = await asUser(users.owner.id, { method: 'DELETE', url: `/api/integrations/keys/${lifecycleKeyId}` });
+    expect(revoked.statusCode).toBe(200);
+    expect(revoked.json().revoked).toBe(true);
+    const blocked = await app.inject({
+      method: 'POST', url: '/api/partner/inquiries',
+      headers: { ...headers, 'idempotency-key': `lifecycle-${fixture}-key-after-revoke` },
+      payload
+    });
+    expect(blocked.statusCode).toBe(401);
+    expect(blocked.json().code).toBe('partner_key_invalid');
+  });
   it('blocks inactive members until an authorized owner restores access', async () => {
     const blocked = await asUser(users.inactiveSales.id, { method: 'GET', url: '/api/session' });
     expect(blocked.statusCode).toBe(403);
