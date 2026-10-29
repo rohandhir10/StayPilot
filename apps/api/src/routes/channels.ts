@@ -1,8 +1,7 @@
 import type { FastifyInstance } from 'fastify';
-import { pool } from '../db.js';
+import { pool, inTransaction } from '../db.js';
 import { requireWorkspaceMember } from '../auth.js';
 import { fail, noStore, safeText } from '../http.js';
-import { inTransaction } from '../db.js';
 import { auditEvent } from '../domain.js';
 import { metaAccountMappingSchema } from '../validation.js';
 
@@ -12,7 +11,7 @@ export async function registerChannelRoutes(app: FastifyInstance): Promise<void>
     if (!member) return;
     try {
       const { rows } = await pool.query(
-        `SELECT channel_key, provider, display_name, status, connection_mode, account_label,
+        `SELECT channel_key, provider, display_name, status, connection_mode, account_label, external_account_id,
                 last_synced_at, last_webhook_at, last_error_code, updated_at
          FROM sp_channel_connections WHERE workspace_id=$1 ORDER BY display_name`, [member.workspace_id]
       );
@@ -53,7 +52,7 @@ export async function registerChannelRoutes(app: FastifyInstance): Promise<void>
            SET external_account_id=$1, account_label=COALESCE($2,account_label), connection_mode='webhook',
                status='pending', last_error_code=NULL, updated_at=now()
            WHERE workspace_id=$3 AND channel_key=$4 AND provider='meta'
-           RETURNING id, channel_key, provider, display_name, status, connection_mode, account_label,
+           RETURNING id, channel_key, provider, display_name, status, connection_mode, account_label, external_account_id,
                      last_synced_at, last_webhook_at, last_error_code, updated_at`,
           [parsed.data.external_account_id, parsed.data.account_label ?? null, member.workspace_id, channelKey]
         );
