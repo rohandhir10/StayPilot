@@ -48,7 +48,7 @@ Follow [the Railway setup guide](docs/railway.md). Set the service root director
 
 ## Run and deploy the frontend
 
-From `apps/web/`, copy `.env.example` to `.env`, set `VITE_API_BASE_URL` to the Railway API origin and `VITE_FIREBASE_PUBLISHABLE_KEY` to the public Firebase Authentication publishable key, then run `npm install`, `npm run typecheck` and `npm run build`. The Vercel project root must be `apps/web`. Follow [the Vercel setup guide](docs/vercel-frontend.md). Add the exact approved frontend origin(s) to Railway `WEB_ORIGINS`. The public `/inquiry` form requires Turnstile site/secret configuration before submissions can succeed.
+From `apps/web/`, copy `.env.example` to `.env`, set `VITE_API_BASE_URL` to the Railway API origin and the four `VITE_FIREBASE_*` Web App settings from Firebase Console, then run `npm install`, `npm run typecheck` and `npm run build`. The Vercel project root must be `apps/web`. Follow [the Vercel setup guide](docs/vercel-frontend.md). Add the exact approved frontend origin(s) to Railway `WEB_ORIGINS`. The public `/inquiry` form requires Turnstile site/secret configuration before submissions can succeed.
 
 ## API reference
 
