@@ -38,7 +38,7 @@ Requirements: Node.js 22+, npm, and a local PostgreSQL database.
    ```
 
 3. Check `http://localhost:3000/api/health` and `http://localhost:3000/api/health/ready`.
-4. Sign in through your Firebase-enabled frontend. To make the initial user the owner, set `OWNER_FIREBASE_USER_ID` to that user's real Firebase Authentication ID before making the first authenticated request.
+4. Sign in through your Firebase-enabled frontend. To make the initial user the owner, set `OWNER_FIREBASE_UID` to that user's real Firebase UID before making the first authenticated request.
 
 This package does **not** include real Firebase Authentication, Meta, or Turnstile keys. Never commit `.env`.
 
