@@ -37,6 +37,10 @@ jobs:
       CLERK_SECRET_KEY: sk_test_staypilot_ci
       OWNER_CLERK_USER_ID: user_staypilot_ci_owner
       WEB_ORIGINS: http://localhost:5173
+      TURNSTILE_SECRET_KEY: ci-only-turnstile-secret
+      TURNSTILE_SITE_KEY: ci-only-turnstile-site-key
+      META_APP_SECRET: ci-only-meta-app-secret-for-tests
+      META_WEBHOOK_VERIFY_TOKEN: test-meta-webhook-token-01234567867890
     defaults:
       run:
         working-directory: apps/api
