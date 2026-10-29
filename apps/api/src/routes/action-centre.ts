@@ -148,33 +148,48 @@ async function buildCandidates(member: WorkspaceMember): Promise<Candidate[]> {
 async function refreshCandidates(member: WorkspaceMember): Promise<number> {
   const candidates = await buildCandidates(member);
   return await inTransaction(async client => {
-    let insertedOrUpdated = 0;
-    for (const task of candidates) {
-      const result = await client.query(
-        `INSERT INTO sp_action_tasks (
-          workspace_id, task_key, source_type, category, title, description, priority, status,
-          assigned_to, due_at, lead_id, conversation_id, source_message_id, evidence_text,
-          evidence_channel, confidence, created_by_user_id
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,'open',$8,$9,$10,$11,$12,$13,$14,$15,$16)
-        ON CONFLICT (workspace_id, task_key) DO UPDATE SET
-          title=EXCLUDED.title, description=EXCLUDED.description, priority=EXCLUDED.priority,
-          assigned_to=CASE WHEN sp_action_tasks.assigned_to='Unassigned' THEN EXCLUDED.assigned_to ELSE sp_action_tasks.assigned_to END,
-          due_at=COALESCE(sp_action_tasks.due_at, EXCLUDED.due_at),
-          lead_id=COALESCE(sp_action_tasks.lead_id, EXCLUDED.lead_id),
-          conversation_id=COALESCE(sp_action_tasks.conversation_id, EXCLUDED.conversation_id),
-          source_message_id=COALESCE(sp_action_tasks.source_message_id, EXCLUDED.source_message_id),
-          evidence_text=EXCLUDED.evidence_text, evidence_channel=EXCLUDED.evidence_channel,
-          confidence=EXCLUDED.confidence, updated_at=now()
-        WHERE sp_action_tasks.status='open'
-        RETURNING id`,
-        [member.workspace_id, task.taskKey, task.sourceType, task.category, task.title, task.description, task.priority,
-          task.assignedTo, task.dueAt, task.leadId, task.conversationId, task.sourceMessageId, task.evidenceText,
-          task.evidenceChannel, task.confidence, member.user_id]
-      );
-      if (result.rows.length) insertedOrUpdated += 1;
+    if (!candidates.length) {
+      await auditEvent(client, { workspaceId: member.workspace_id, actor: member, action: 'action_centre.refreshed', entityType: 'action_task', metadata: { candidate_count: 0, touched_count: 0 } });
+      return 0;
     }
-    await auditEvent(client, { workspaceId: member.workspace_id, actor: member, action: 'action_centre.refreshed', entityType: 'action_task', metadata: { candidate_count: candidates.length, touched_count: insertedOrUpdated } });
-    return insertedOrUpdated;
+    // Bulk upsert keeps a scan of hundreds of inquiries bounded to one database round trip.
+    const records = candidates.map(task => ({
+      task_key: task.taskKey, source_type: task.sourceType, category: task.category,
+      title: task.title, description: task.description, priority: task.priority,
+      assigned_to: task.assignedTo, due_at: task.dueAt, lead_id: task.leadId,
+      conversation_id: task.conversationId, source_message_id: task.sourceMessageId,
+      evidence_text: task.evidenceText, evidence_channel: task.evidenceChannel, confidence: task.confidence
+    }));
+    const result = await client.query(
+      `INSERT INTO sp_action_tasks (
+        workspace_id, task_key, source_type, category, title, description, priority, status,
+        assigned_to, due_at, lead_id, conversation_id, source_message_id, evidence_text,
+        evidence_channel, confidence, created_by_user_id
+      )
+      SELECT $1, x.task_key, x.source_type, x.category, x.title, x.description, x.priority, 'open',
+             COALESCE(NULLIF(x.assigned_to, ''), 'Unassigned'), x.due_at, x.lead_id, x.conversation_id,
+             x.source_message_id, COALESCE(x.evidence_text, ''), x.evidence_channel, x.confidence, $3
+      FROM jsonb_to_recordset($2::jsonb) AS x(
+        task_key text, source_type text, category text, title text, description text, priority text,
+        assigned_to text, due_at timestamptz, lead_id uuid, conversation_id uuid, source_message_id uuid,
+        evidence_text text, evidence_channel text, confidence text
+      )
+      ON CONFLICT (workspace_id, task_key) DO UPDATE SET
+        title=EXCLUDED.title, description=EXCLUDED.description, priority=EXCLUDED.priority,
+        assigned_to=CASE WHEN sp_action_tasks.assigned_to='Unassigned' THEN EXCLUDED.assigned_to ELSE sp_action_tasks.assigned_to END,
+        due_at=COALESCE(sp_action_tasks.due_at, EXCLUDED.due_at),
+        lead_id=COALESCE(sp_action_tasks.lead_id, EXCLUDED.lead_id),
+        conversation_id=COALESCE(sp_action_tasks.conversation_id, EXCLUDED.conversation_id),
+        source_message_id=COALESCE(sp_action_tasks.source_message_id, EXCLUDED.source_message_id),
+        evidence_text=EXCLUDED.evidence_text, evidence_channel=EXCLUDED.evidence_channel,
+        confidence=EXCLUDED.confidence, updated_at=now()
+      WHERE sp_action_tasks.status='open'
+      RETURNING id`,
+      [member.workspace_id, JSON.stringify(records), member.user_id]
+    );
+    const touched = result.rowCount ?? result.rows.length;
+    await auditEvent(client, { workspaceId: member.workspace_id, actor: member, action: 'action_centre.refreshed', entityType: 'action_task', metadata: { candidate_count: candidates.length, touched_count: touched } });
+    return touched;
   });
 }
 
