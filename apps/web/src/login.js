@@ -1,4 +1,4 @@
-import Clerk from "@clerk/clerk-js";
+import { Clerk } from "@clerk/clerk-js";
 
 const key = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 const button = document.querySelector("#google-sign-in");
