@@ -56,6 +56,9 @@ describe('workspace integrity constraints (PostgreSQL integration)', () => {
   afterAll(async () => {
     if (defaultPartnerKeyId) await pool.query('DELETE FROM sp_partner_api_keys WHERE id=$1', [defaultPartnerKeyId]);
     if (defaultConversationId) await pool.query('DELETE FROM sp_conversations WHERE id=$1', [defaultConversationId]);
+    // Workspace deletion is restricted while any lead remains in that workspace.
+    // Remove both fixtures first so cleanup itself verifies the intended FK policy.
+    if (otherLeadId) await pool.query('DELETE FROM leads WHERE id=$1', [otherLeadId]);
     if (defaultLeadId) await pool.query('DELETE FROM leads WHERE id=$1', [defaultLeadId]);
     if (otherWorkspaceId) await pool.query('DELETE FROM workspaces WHERE id=$1', [otherWorkspaceId]);
   });
