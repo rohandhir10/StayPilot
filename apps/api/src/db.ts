@@ -24,8 +24,15 @@ export async function checkDatabase(): Promise<void> {
 }
 
 export async function checkSchemaReady(): Promise<void> {
-  const result = await pool.query("SELECT 1 FROM schema_migrations WHERE name = $1 LIMIT 1", ['0001_initial.sql']);
-  if (!result.rows.length) throw new Error('database_schema_not_migrated');
+  // Keep this list synchronized with required migrations as new versions ship.
+  const required = ['0001_initial.sql', '0002_workspace_integrity.sql'];
+  const result = await pool.query(
+    'SELECT name FROM schema_migrations WHERE name = ANY($1::text[])',
+    [required]
+  );
+  const applied = new Set(result.rows.map((row: { name: string }) => row.name));
+  const missing = required.filter(name => !applied.has(name));
+  if (missing.length) throw new Error('database_schema_not_migrated');
 }
 
 export async function closeDatabase(): Promise<void> {

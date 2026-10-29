@@ -47,13 +47,19 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-      # A package-lock.json is intentionally not fabricated; commit one after
-      # running npm install in a network-enabled environment, then switch this
-      # step to `npm ci` for deterministic dependency resolution.
+      # Lockfile generation remains follow-up work until a generated lockfile is committed.
       - name: Install dependencies
         run: npm install --no-audit --no-fund
-      - name: Apply schema migrations to the isolated CI database
-        run: npm run migrate
+      - name: Apply schema migrations concurrently to exercise deployment locking
+        run: |
+          npm run migrate &
+          first=$!
+          npm run migrate &
+          second=$!
+          wait "$first"
+          wait "$second"
+      - name: Verify migration ledger and schema version
+        run: node --input-type=module -e "import pg from 'pg'; const db=new pg.Pool({connectionString:process.env.DATABASE_URL}); const r=await db.query('SELECT name FROM schema_migrations ORDER BY name'); console.log(r.rows); if(!r.rows.some(x=>x.name==='0002_workspace_integrity.sql')) process.exitCode=1; await db.end();"
       - name: Typecheck
         run: npm run typecheck
       - name: Unit tests
