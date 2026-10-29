@@ -123,6 +123,7 @@ function renderTask(task, { isPreview, canWrite }) {
       <h3>${escapeHtml(task.title)}</h3>
       <p class="ac-task-description">${escapeHtml(task.description)}</p>
       <div class="ac-evidence"><div class="ac-evidence-head"><span>WHY THIS IS HERE</span><span class="ac-confidence">${escapeHtml(confidence)} CONFIDENCE</span></div><p>${escapeHtml(evidenceText)}</p></div>
+      ${task.completion_note ? '<div class="ac-completion-record"><b>COMPLETION RECORD</b><p>' + escapeHtml(task.completion_note) + '</p></div>' : ''}
       <div class="ac-task-meta"><span><span aria-hidden="true">◷</span> ${escapeHtml(dateLabel(task.due_at))}</span><span><span aria-hidden="true">♙</span> ${escapeHtml(task.assigned_to || 'Unassigned')}</span>${connectedTo ? '<span>↗ ' + escapeHtml(connectedTo) + '</span>' : ''}</div>
     </div>
     <div class="ac-task-actions">
@@ -292,16 +293,21 @@ export function renderActionCentre(container, { leads = [], api, workspaceSessio
     const id = actionButton.dataset.acId;
     const status = actionButton.dataset.acAction;
     if (!id || !status) return;
+    let completionNote = '';
+    if (status === 'completed') {
+      completionNote = (window.prompt('What verifies completion? For example: message sent and timestamp, reservation-system check, or call outcome. Do not mark it complete until the outcome is confirmed.') || '').trim();
+      if (completionNote.length < 5) { toast('Completion evidence is required before marking this task done.', true); return; }
+    }
     actionButton.setAttribute('disabled', 'disabled');
     try {
       if (isPreview) {
         const entry = [...previewState.entries()].find(([, value]) => value.id === id);
-        if (entry) previewState.set(entry[0], { ...entry[1], status });
+        if (entry) previewState.set(entry[0], { ...entry[1], status, completion_note: status === 'completed' ? completionNote : status === 'open' ? '' : entry[1].completion_note });
       } else {
-        await api('/action-centre/tasks/' + encodeURIComponent(id) + '/status', { method: 'POST', body: JSON.stringify({ status }) });
+        await api('/action-centre/tasks/' + encodeURIComponent(id) + '/status', { method: 'POST', body: JSON.stringify({ status, completion_note: completionNote }) });
       }
       await loadTasks();
-      toast(status === 'completed' ? 'Task marked complete. Confirm the outcome is recorded.' : status === 'dismissed' ? 'Suggestion dismissed.' : 'Task reopened.');
+      toast(status === 'completed' ? 'Completion evidence recorded.' : status === 'dismissed' ? 'Suggestion dismissed.' : 'Task reopened.');
     } catch (error) {
       toast('Could not update task: ' + error.message, true);
       actionButton.removeAttribute('disabled');
