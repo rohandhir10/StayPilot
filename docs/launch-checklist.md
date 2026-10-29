@@ -11,7 +11,7 @@
 - [ ] Keep Fastify `trustProxy` disabled. Verify public ingress overwrites `X-Real-IP`, rate limits bucket by that validated header, and no untrusted workload can reach the API through Railway private networking.
 - [ ] Test backup/restore for PostgreSQL and decide retention/deletion for leads, messages, audit history and backups.
 - [ ] Enable a verified Meta test webhook only after the app's account permissions are approved; confirm invalid signatures never write messages.
-- [ ] Configure Cloudflare Turnstile for the public inquiry form and test invalid/expired CAPTCHA, consent rejection, rate limiting and success.
+- [ ] Configure Cloudflare Turnstile for every approved `WEB_ORIGINS` hostname and test hostname mismatch, invalid/expired CAPTCHA, consent rejection, pre-verification IP limiting and success.
 - [ ] Verify real business flows with test customers: create/update inquiries, view activity, link/unlink a conversation, add an internal note, preview import, duplicate confirmation, and idempotent partner retries.
 - [ ] Confirm external message send actions are unavailable in UI/API while sending remains unimplemented.
 - [ ] Define incident response and credential rotation owners; test partner key revocation.

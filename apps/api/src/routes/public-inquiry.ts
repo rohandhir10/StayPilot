@@ -5,17 +5,7 @@ import { getDefaultWorkspaceId } from '../auth.js';
 import { createLeadRecord } from '../domain.js';
 import { hitRateLimit } from '../security.js';
 import { publicLeadSchema } from '../validation.js';
-
-async function verifyTurnstile(secret: string, token: string): Promise<boolean> {
-  const form = new URLSearchParams({ secret, response: token });
-  const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
-    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: form.toString(), signal: AbortSignal.timeout(5000)
-  });
-  if (!response.ok) return false;
-  const result = await response.json().catch(() => ({})) as { success?: boolean };
-  return result.success === true;
-}
+import { verifyTurnstile } from '../turnstile.js';
 
 export async function registerPublicInquiryRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/public/form-config', async (_request, reply) => {
@@ -43,18 +33,26 @@ export async function registerPublicInquiryRoutes(app: FastifyInstance): Promise
     if (!env.turnstileSecretKey) return fail(reply, 503, 'The hotel inquiry form is awaiting security setup.', 'captcha_setup_required');
     const token = typeof body.turnstile_token === 'string' ? body.turnstile_token : '';
     if (!token || token.length > 4096) return fail(reply, 400, 'Complete the security check and try again.', 'captcha_required');
-    let captchaValid = false;
-    try {
-      captchaValid = await verifyTurnstile(env.turnstileSecretKey, token);
-    } catch {
-      return fail(reply, 503, 'The security check is temporarily unavailable.', 'captcha_unavailable');
-    }
-    if (!captchaValid) return fail(reply, 400, 'The security check could not be verified.', 'captcha_invalid');
+
+    // Apply the IP limit before making an outbound CAPTCHA verification request.
     try {
       if (!(await hitRateLimit(`website-ip:${clientIpForRateLimiting(request)}`, 30, 3600))) {
         reply.header('Retry-After', '3600');
         return fail(reply, 429, 'Too many inquiries came from this connection. Please try later.', 'rate_limit_exceeded');
       }
+    } catch {
+      return fail(reply, 503, 'The inquiry form is temporarily unavailable.', 'rate_limit_unavailable');
+    }
+
+    let captchaValid = false;
+    try {
+      const expectedHostnames = env.webOrigins.map(origin => new URL(origin).hostname.toLowerCase());
+      captchaValid = await verifyTurnstile(env.turnstileSecretKey, token, expectedHostnames);
+    } catch {
+      return fail(reply, 503, 'The security check is temporarily unavailable.', 'captcha_unavailable');
+    }
+    if (!captchaValid) return fail(reply, 400, 'The security check could not be verified for this website.', 'captcha_invalid');
+    try {
       if (!(await hitRateLimit(`website-email:${email}`, env.publicRateLimitPerHour, 3600))) {
         reply.header('Retry-After', '3600');
         return fail(reply, 429, 'Too many inquiries were submitted for this contact. Please try later.', 'rate_limit_exceeded');

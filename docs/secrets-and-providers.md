@@ -27,7 +27,7 @@ Implemented now: raw-body HMAC verification, event de-duplication, normalized in
 
 1. Create a Turnstile widget and register the exact website/preview domains.
 2. Put the public site key into Railway as `TURNSTILE_SITE_KEY` (the form-config endpoint returns it to the browser) and the secret key into Railway as `TURNSTILE_SECRET_KEY`.
-3. Implement the Turnstile widget in the existing Vercel frontend and POST the validated form fields to `/api/public/inquiry`. This backend bundle deliberately does not ship a second frontend or standalone inquiry page.
+3. Implement the Turnstile widget in the existing Vercel frontend and POST the validated form fields to `/api/public/inquiry`. The provider's returned hostname must match a hostname in Railway's `WEB_ORIGINS` list; register production and approved preview domains with Turnstile. This backend bundle deliberately does not ship a second frontend or standalone inquiry page.
 4. Verify a valid submission creates a lead, and submissions without CAPTCHA or affirmative privacy consent are rejected.
 
 The endpoint fails closed when the secret is missing or verification is unavailable. Do not bypass CAPTCHA in production to make a form work.
