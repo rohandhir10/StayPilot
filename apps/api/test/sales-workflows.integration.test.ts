@@ -85,7 +85,10 @@ describe('persistent hotel-sales workflows (PostgreSQL integration)', () => {
     await app.close();
     if (conversationIds.length) await pool.query('DELETE FROM sp_conversations WHERE id = ANY($1::uuid[])', [conversationIds]);
     if (leadIds.length) {
-      await pool.query('DELETE FROM sp_audit_events WHERE workspace_id=$1 AND actor_email=$2', [workspaceId, actorEmail]);
+      await pool.query(
+        "DELETE FROM sp_audit_events WHERE workspace_id=$1 AND (actor_email=$2 OR metadata->>'lead_id'=ANY($3::text[]))",
+        [workspaceId, actorEmail, leadIds]
+      );
       await pool.query('DELETE FROM leads WHERE workspace_id=$1 AND id = ANY($2::uuid[])', [workspaceId, leadIds]);
     }
   });
