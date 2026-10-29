@@ -129,13 +129,14 @@ function renderTask(task, { isPreview, canWrite }) {
     <div class="ac-task-actions">
       ${statusPill(task)}
       ${task.lead_id ? '<button type="button" class="ac-link-btn" data-ac-lead="' + escapeHtml(task.lead_id) + '">Open inquiry ↗</button>' : ''}
+      ${task.conversation_id ? '<button type="button" class="ac-link-btn" data-ac-conversation="' + escapeHtml(task.conversation_id) + '">Open source conversation ↗</button>' : ''}
       ${task.status === 'open' && canWrite ? '<button type="button" class="btn btn-primary btn-sm" data-ac-action="completed" data-ac-id="' + escapeHtml(task.id) + '">Mark done</button><button type="button" class="ac-dismiss" data-ac-action="dismissed" data-ac-id="' + escapeHtml(task.id) + '">Dismiss suggestion</button>' : ''}
       ${task.status !== 'open' && canWrite ? '<button type="button" class="ac-link-btn" data-ac-action="open" data-ac-id="' + escapeHtml(task.id) + '">Reopen</button>' : ''}
     </div>
   </article>`;
 }
 
-export function renderActionCentre(container, { leads = [], api, workspaceSession = null, isPreview = false, toast = () => {}, onOpenLead = () => {} }) {
+export function renderActionCentre(container, { leads = [], api, workspaceSession = null, isPreview = false, toast = () => {}, onOpenLead = () => {}, onOpenConversation = () => {} }) {
   const role = workspaceSession?.workspace?.role || 'viewer';
   const canWrite = isPreview || ['owner', 'admin', 'sales'].includes(role);
   const canManageConnections = !isPreview && ['owner', 'admin'].includes(role);
@@ -302,7 +303,9 @@ export function renderActionCentre(container, { leads = [], api, workspaceSessio
     const leadButton = target.closest('[data-ac-lead]');
     const connectButton = target.closest('[data-ac-connect-provider]');
     const syncButton = target.closest('[data-ac-sync-channel]');
+    const conversationButton = target.closest('[data-ac-conversation]');
     if (leadButton) { onOpenLead(leadButton.dataset.acLead); return; }
+    if (conversationButton) { onOpenConversation(conversationButton.dataset.acConversation); return; }
     if (connectButton) {
       const provider = connectButton.dataset.acConnectProvider;
       if (!['google','microsoft'].includes(provider)) return;
