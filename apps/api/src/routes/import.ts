@@ -1,6 +1,5 @@
 import type { FastifyInstance } from 'fastify';
 import { pool, inTransaction } from '../db.js';
-import type pg from 'pg';
 import { requireWorkspaceMember } from '../auth.js';
 import { fail, noStore } from '../http.js';
 import { createLeadsBatchWithClient } from '../domain.js';
