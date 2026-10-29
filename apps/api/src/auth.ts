@@ -1,8 +1,8 @@
-import { clerkClient, getAuth } from '@clerk/fastify';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { env } from './config.js';
 import { pool, inTransaction } from './db.js';
 import { fail } from './http.js';
+import { FirebaseAuthNotConfiguredError, verifyFirebaseToken } from './firebase-auth.js';
 
 export type MemberRole = 'owner' | 'admin' | 'sales' | 'viewer';
 export type WorkspaceMember = {
@@ -15,16 +15,7 @@ export type WorkspaceMember = {
 
 const allRoles: MemberRole[] = ['owner', 'admin', 'sales', 'viewer'];
 
-async function getVerifiedPrimaryEmail(userId: string): Promise<{ email: string; name: string } | null> {
-  const user = await clerkClient.users.getUser(userId);
-  const primary = user.emailAddresses.find(item => item.id === user.primaryEmailAddressId);
-  const verified = primary?.verification?.status === 'verified'
-    ? primary
-    : user.emailAddresses.find(item => item.verification?.status === 'verified');
-  if (!verified?.emailAddress) return null;
-  const name = [user.firstName, user.lastName].filter(Boolean).join(' ').trim() || verified.emailAddress;
-  return { email: verified.emailAddress.trim().toLowerCase(), name };
-}
+type VerifiedProfile = { email: string; name: string };
 
 export async function getDefaultWorkspaceId(): Promise<string> {
   const { rows } = await pool.query<{ id: string }>("SELECT id FROM workspaces WHERE slug = 'default' LIMIT 1");
@@ -32,8 +23,8 @@ export async function getDefaultWorkspaceId(): Promise<string> {
   return rows[0].id;
 }
 
-async function bootstrapConfiguredOwner(userId: string, profile: { email: string; name: string }): Promise<void> {
-  if (!env.ownerClerkUserId || userId !== env.ownerClerkUserId) return;
+async function bootstrapConfiguredOwner(userId: string, profile: VerifiedProfile): Promise<void> {
+  if (!env.ownerFirebaseUid || userId !== env.ownerFirebaseUid) return;
   await pool.query(
     `INSERT INTO workspace_members (workspace_id, user_id, email, display_name, role, is_active)
      SELECT id, $1, $2, $3, 'owner', true FROM workspaces WHERE slug = 'default'
@@ -43,7 +34,7 @@ async function bootstrapConfiguredOwner(userId: string, profile: { email: string
   );
 }
 
-async function acceptMatchingInvite(userId: string, profile: { email: string; name: string }): Promise<void> {
+async function acceptMatchingInvite(userId: string, profile: VerifiedProfile): Promise<void> {
   const workspaceId = await getDefaultWorkspaceId();
   await inTransaction(async client => {
     const invitation = await client.query<{ id: string; role: MemberRole }>(
@@ -78,10 +69,27 @@ export async function requireWorkspaceMember(
   reply: FastifyReply,
   allowedRoles: MemberRole[] = allRoles
 ): Promise<WorkspaceMember | null> {
-  const auth = getAuth(request);
-  const userId = auth.isAuthenticated ? auth.userId : null;
-  if (!userId) {
+  const authorization = request.headers.authorization || '';
+  const match = /^Bearer\s+(\S+)$/i.exec(authorization);
+  if (!match) {
     fail(reply, 401, 'Sign in to access this StayPilot workspace.', 'authentication_required');
+    return null;
+  }
+
+  let identity: Awaited<ReturnType<typeof verifyFirebaseToken>>;
+  try {
+    identity = await verifyFirebaseToken(match[1]!);
+  } catch (error) {
+    if (error instanceof FirebaseAuthNotConfiguredError) {
+      fail(reply, 503, 'Google sign-in is not configured on this StayPilot API.', 'firebase_auth_not_configured');
+      return null;
+    }
+    fail(reply, 401, 'Your Google sign-in could not be verified. Sign in again.', 'identity_verification_failed');
+    return null;
+  }
+  const userId = identity.uid;
+  if (!userId || userId.length > 128) {
+    fail(reply, 401, 'Your Google sign-in could not be verified. Sign in again.', 'identity_verification_failed');
     return null;
   }
 
@@ -91,23 +99,23 @@ export async function requireWorkspaceMember(
   );
 
   if (!result.rows.length) {
-    let profile: { email: string; name: string } | null = null;
-    try {
-      profile = await getVerifiedPrimaryEmail(userId);
-    } catch {
-      fail(reply, 401, 'Your sign-in could not be verified. Sign in again.', 'identity_verification_failed');
+    const verifiedEmail = identity.emailVerified && identity.email
+      ? identity.email.trim().toLowerCase()
+      : '';
+    if (!verifiedEmail || !verifiedEmail.includes('@')) {
+      fail(reply, 403, 'Use a Google account with a verified email address invited to this workspace.', 'verified_email_required');
       return null;
     }
-    if (!profile) {
-      fail(reply, 403, 'Use a verified email address invited to this workspace.', 'verified_email_required');
-      return null;
-    }
+    const profile: VerifiedProfile = {
+      email: verifiedEmail,
+      name: (identity.name || verifiedEmail).trim().slice(0, 200)
+    };
     await bootstrapConfiguredOwner(userId, profile);
     result = await pool.query<WorkspaceMember & { is_active: boolean }>(
       `SELECT workspace_id, user_id, email, display_name, role, is_active
        FROM workspace_members WHERE user_id = $1 LIMIT 2`, [userId]
     );
-    if (!result.rows.length && env.ownerClerkUserId !== userId) {
+    if (!result.rows.length && env.ownerFirebaseUid !== userId) {
       try { await acceptMatchingInvite(userId, profile); } catch {
         fail(reply, 403, 'Workspace invitation could not be accepted. Ask an owner to review access.', 'invitation_acceptance_failed');
         return null;
