@@ -2,9 +2,9 @@ import type { FastifyInstance } from 'fastify';
 import { pool, inTransaction } from '../db.js';
 import { randomUUID } from 'node:crypto';
 import { requireWorkspaceMember, type MemberRole } from '../auth.js';
-import { fail, noStore } from '../http.js';
+import { fail, noStore, isUuid } from '../http.js';
 import { auditEvent } from '../domain.js';
-import { conversationQuerySchema, linkSchema, messageQuerySchema, noteSchema } from '../validation.js';
+import { conversationQuerySchema, conversationStatusUpdateSchema, linkSchema, messageQuerySchema, noteSchema } from '../validation.js';
 import { decodePageCursor, encodePageCursor } from '../pagination.js';
 
 const channelKeys = new Set(['whatsapp','email_gmail','email_outlook','phone','partner','website','instagram','facebook','booking_com','expedia','other_otas','spreadsheet','other']);
@@ -67,6 +67,39 @@ export async function registerInboxRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
+  app.patch('/api/inbox/conversations/:id/status', async (request, reply) => {
+    const member = await requireWorkspaceMember(request, reply, writers);
+    if (!member) return;
+    const id = (request.params as { id?: string }).id || '';
+    if (!isUuid(id)) return fail(reply, 400, 'A valid conversation ID is required.', 'invalid_conversation_id');
+    const parsed = conversationStatusUpdateSchema.safeParse(request.body);
+    if (!parsed.success) return fail(reply, 400, parsed.error.issues[0]?.message || 'Conversation status is invalid.', 'invalid_conversation_status');
+    try {
+      const result = await inTransaction(async client => {
+        const current = await client.query<{ id: string; status: string }>(
+          'SELECT id,status FROM sp_conversations WHERE id=$1 AND workspace_id=$2 FOR UPDATE',
+          [id, member.workspace_id]
+        );
+        if (!current.rows[0]) return { kind: 'missing' as const };
+        const previousStatus = current.rows[0].status;
+        if (previousStatus === parsed.data.status) return { kind: 'unchanged' as const, status: previousStatus };
+        const updated = await client.query<{ status: string }>(
+          'UPDATE sp_conversations SET status=$1,updated_at=now() WHERE id=$2 AND workspace_id=$3 RETURNING status',
+          [parsed.data.status, id, member.workspace_id]
+        );
+        await auditEvent(client, {
+          workspaceId: member.workspace_id, actor: member, action: 'inbox.conversation_status_changed',
+          entityType: 'conversation', entityId: id, metadata: { from: previousStatus, to: parsed.data.status }
+        });
+        return { kind: 'updated' as const, status: updated.rows[0]!.status };
+      });
+      if (result.kind === 'missing') return fail(reply, 404, 'Conversation not found.', 'conversation_not_found');
+      noStore(reply);
+      return reply.send({ ok: true, conversation_id: id, status: result.status, changed: result.kind === 'updated' });
+    } catch {
+      return fail(reply, 500, 'Could not update conversation status.', 'conversation_status_update_failed');
+    }
+  });
   app.get('/api/inbox/messages', async (request, reply) => {
     const member = await requireWorkspaceMember(request, reply);
     if (!member) return;

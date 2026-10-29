@@ -37,6 +37,7 @@ All paths include `/api`. Private endpoints require `Authorization: Bearer <Cler
 | Method | Route | Access | Purpose |
 |---|---|---|---|
 | GET | `/api/inbox/conversations?limit=50&channel=whatsapp&q=search&cursor=…` | Clerk + active member | Search and filter conversations |
+| PATCH | `/api/inbox/conversations/:id/status` | Owner/admin/sales | Change conversation status to open, pending, or closed; records an audit event |
 | GET | `/api/inbox/messages?conversation_id=<uuid>&limit=200&cursor=…` | Clerk + active member | Return latest 200 messages in chronological order |
 | POST | `/api/inbox/messages` | Owner/admin/sales | Create an internal note; never sends an external message |
 | POST | `/api/inbox/link` | Owner/admin/sales | Link/unlink a conversation and workspace inquiry; human action is required |

@@ -105,6 +105,9 @@ export const conversationQuerySchema = z.object({
   q: z.string().trim().max(120).optional()
 });
 
+export const conversationStatusUpdateSchema = z.object({
+  status: z.enum(['open', 'pending', 'closed'])
+}).strict();
 export const messageQuerySchema = z.object({
   conversation_id: z.string().uuid(),
   limit: z.coerce.number().int().min(1).max(200).default(200),

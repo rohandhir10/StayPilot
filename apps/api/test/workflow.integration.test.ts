@@ -341,6 +341,39 @@ describe('StayPilot API workflow integration (PostgreSQL)', () => {
     expect(messages.json().messages.some((item: { body_text: string; direction: string }) =>
       item.body_text === 'Internal handover; do not send externally' && item.direction === 'note'
     )).toBe(true);
+
+    const statusChanged = await app.inject({
+      method: 'PATCH', url: `/api/inbox/conversations/${conversationId}/status`,
+      payload: { status: 'pending' }
+    });
+    expect(statusChanged.statusCode).toBe(200);
+    expect(statusChanged.json()).toMatchObject({ ok: true, conversation_id: conversationId, status: 'pending', changed: true });
+    const filtered = await app.inject({
+      method: 'GET', url: '/api/inbox/conversations?status=pending'
+    });
+    expect(filtered.statusCode).toBe(200);
+    expect(filtered.json().conversations.some((item: { id: string }) => item.id === conversationId)).toBe(true);
+
+    const noChange = await app.inject({
+      method: 'PATCH', url: `/api/inbox/conversations/${conversationId}/status`,
+      payload: { status: 'pending' }
+    });
+    expect(noChange.statusCode).toBe(200);
+    expect(noChange.json().changed).toBe(false);
+
+    const invalidStatus = await app.inject({
+      method: 'PATCH', url: `/api/inbox/conversations/${conversationId}/status`,
+      payload: { status: 'sent' }
+    });
+    expect(invalidStatus.statusCode).toBe(400);
+    expect(invalidStatus.json().code).toBe('invalid_conversation_status');
+
+    const closed = await app.inject({
+      method: 'PATCH', url: `/api/inbox/conversations/${conversationId}/status`,
+      payload: { status: 'closed' }
+    });
+    expect(closed.statusCode).toBe(200);
+    expect(closed.json().status).toBe('closed');
   });
 
   it('verifies Meta webhook handshake, rejects invalid signatures and deduplicates retries', async () => {
