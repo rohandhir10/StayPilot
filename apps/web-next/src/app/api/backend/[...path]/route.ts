@@ -21,7 +21,7 @@ async function proxy(request: NextRequest, context: Context) {
   if (!path?.length || path.some(part => !part || part === '.' || part === '..' || part.includes('/'))) {
     return NextResponse.json({ error: 'Invalid API path.' }, { status: 400 });
   }
-  const target = new URL('/' + ['api', ...path].map(encodeURIComponent).join('/'), origin);
+  const target = new URL('/' + path.map(encodeURIComponent).join('/'), origin);
   target.search = request.nextUrl.search;
   const headers = new Headers();
   for (const key of ['accept', 'authorization', 'content-type', 'idempotency-key', 'x-hub-signature-256']) {
