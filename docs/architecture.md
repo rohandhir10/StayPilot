@@ -24,6 +24,7 @@ GitHub is the only code source of truth. Railway and Vercel should be connected 
 - **Proxy trust:** forwarded client-IP headers are trusted only when the direct peer matches the explicit `TRUSTED_PROXY_CIDRS` allowlist. Production must use narrow, provider-confirmed ingress ranges; never use a universal CIDR.
 - **PostgreSQL:** foreign keys, unique constraints, status constraints, transactional persistence, persisted idempotency/rate-limit state.
 - **Auth.js:** Google OAuth, encrypted HTTP-only session cookies, CSRF protection and restricted test-only credentials. The Next.js server signs 5-minute HS256 API tokens using a separate shared secret.
+- **Cutover compatibility:** the Fastify API temporarily accepts both Auth.js API tokens and existing Clerk sessions so the currently deployed Vite client is not broken before the Next.js project, secrets and Google callback are configured. Remove the Clerk fallback only after the Next.js deployment is live and verified.
 - **API token:** Fastify accepts only HS256 tokens with the configured issuer, `staypilot-api` audience, verified-email claim and valid time bounds. The API secret is never exposed to browser JavaScript.
 - **Provider accounts:** Meta/Turnstile credentials are configured by the owner in the secret store; integration eligibility and permissions must be approved at the provider.
 
@@ -41,7 +42,7 @@ GitHub is the only code source of truth. Railway and Vercel should be connected 
 
 ## Authorization model
 
-The API verifies the Auth.js-issued token and resolves the active `workspace_members` row by stable subject or verified email. A signed-in account without an active membership is denied. Initial owner bootstrap is restricted to the configured `OWNER_EMAIL`. Other members are added only by an invitation matching the verified email and an unexpired, unrevoked invite. Test credentials are accepted only when the API-side feature flag and exact test email match; that identity is provisioned only into the isolated `test` workspace. User IDs, role names, workspace IDs or owner claims supplied in request bodies are ignored.
+The API verifies the Auth.js-issued token and resolves the active `workspace_members` row by stable subject or verified email. During the staged migration it also accepts the current Clerk identity path for the old Vite deployment; this fallback is temporary and must be removed after the frontend cutover. A signed-in account without an active membership is denied. Initial owner bootstrap is restricted to the configured `OWNER_EMAIL`. Other members are added only by an invitation matching the verified email and an unexpired, unrevoked invite. Test credentials are accepted only when the API-side feature flag and exact test email match; that identity is provisioned only into the isolated `test` workspace. User IDs, role names, workspace IDs or owner claims supplied in request bodies are ignored.
 
 Current scope is one default StayPilot workspace, appropriate for one hotel sales operation. Multi-workspace tenant selection and cross-portfolio isolation are not yet implemented; do not market this starter as a multi-customer SaaS without extending the membership resolver and tests.
 
