@@ -1,4 +1,4 @@
-import { jwtVerify } from 'jose';
+import { verifyApiToken } from './auth-token.js';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { env } from './config.js';
 import { pool, inTransaction } from './db.js';
@@ -14,22 +14,11 @@ export type WorkspaceMember = {
 };
 const allRoles: MemberRole[] = ['owner', 'admin', 'sales', 'viewer'];
 
-type AuthProfile = { id: string; email: string; name: string; provider: string };
+type AuthProfile = { id: string; email: string; name: string; provider: 'google' | 'test-credentials' };
 async function verifyRequest(request: FastifyRequest): Promise<AuthProfile | null> {
   const header = request.headers.authorization;
   if (!header?.startsWith('Bearer ') || !env.apiAuthSecret) return null;
-  try {
-    const { payload } = await jwtVerify(header.slice(7), new TextEncoder().encode(env.apiAuthSecret), {
-      algorithms: ['HS256'], issuer: env.authTokenIssuer, audience: 'staypilot-api', clockTolerance: 5
-    });
-    if (typeof payload.sub !== 'string' || !payload.sub || typeof payload.email !== 'string' ||
-        payload.email_verified !== true || typeof payload.name !== 'string' || typeof payload.auth_provider !== 'string') return null;
-    const email = payload.email.trim().toLowerCase();
-    if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) || email.length > 254) return null;
-    return { id: payload.sub, email, name: payload.name.slice(0, 160) || email, provider: payload.auth_provider };
-  } catch {
-    return null;
-  }
+  return verifyApiToken(header.slice(7), env.apiAuthSecret, env.authTokenIssuer);
 }
 
 export async function getDefaultWorkspaceId(): Promise<string> {
@@ -98,7 +87,7 @@ export async function requireWorkspaceMember(
     }
     await pool.query(
       `INSERT INTO workspace_members (workspace_id, user_id, email, display_name, role, is_active)
-       SELECT id, $1, $2, $3, 'admin', true FROM workspaces WHERE slug = 'test'
+       SELECT id, $1, $2, $3, 'sales', true FROM workspaces WHERE slug = 'test'
        ON CONFLICT (workspace_id, email) DO NOTHING`,
       [profile.id, profile.email, profile.name]
     );
