@@ -11,14 +11,16 @@ export async function GET() {
     return NextResponse.json({ error: 'Authentication required.' }, { status: 401, headers: { 'Cache-Control': 'no-store' } });
   }
   const secret = process.env.API_AUTH_SECRET;
-  if (!secret || secret.length < 32) {
+  const issuer = process.env.AUTH_TOKEN_ISSUER;
+  const provider = session.user.authProvider;
+  if (!secret || secret.length < 32 || !issuer || !['google', 'test-credentials'].includes(provider ?? '')) {
     return NextResponse.json({ error: 'Authentication service is not configured.' }, { status: 503, headers: { 'Cache-Control': 'no-store' } });
   }
   const now = Math.floor(Date.now() / 1000);
-  const token = await new SignJWT({ email: session.user.email.toLowerCase(), name: session.user.name ?? session.user.email, email_verified: true, auth_provider: session.user.authProvider ?? 'unknown' })
+  const token = await new SignJWT({ email: session.user.email.toLowerCase(), name: session.user.name ?? session.user.email, email_verified: true, auth_provider: provider })
     .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
     .setSubject(session.user.id)
-    .setIssuer(process.env.AUTH_TOKEN_ISSUER ?? 'https://staypilot.app')
+    .setIssuer(issuer)
     .setAudience('staypilot-api')
     .setIssuedAt(now).setNotBefore(now - 5).setExpirationTime(now + 300)
     .sign(new TextEncoder().encode(secret));
