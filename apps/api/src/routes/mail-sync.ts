@@ -103,7 +103,7 @@ async function ensureStartAt(credential: MailCredential): Promise<Date> {
 }
 function parseAddress(value: string) {
   const match = value.trim().match(/^(.*?)\s*<([^<>]+)>$/);
-  if (match) return { name: match[1].trim().replace(/^["']|["']$/g, '').slice(0,160), address: match[2].trim().slice(0,320) };
+  if (match) return { name: (match[1] ?? '').trim().replace(/^["']|["']$/g, '').slice(0,160), address: (match[2] ?? '').trim().slice(0,320) };
   return { name: '', address: value.trim().slice(0,320) };
 }
 function htmlToText(value: string): string {
