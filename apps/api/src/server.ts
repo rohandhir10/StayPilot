@@ -1,3 +1,4 @@
+import { clerkPlugin } from '@clerk/fastify';
 import Fastify from 'fastify';
 import { randomUUID } from 'node:crypto';
 import cors from '@fastify/cors';
@@ -54,6 +55,7 @@ await app.register(rateLimit, {
   timeWindow: '1 minute',
   errorResponseBuilder: () => ({ error: 'Too many requests. Retry shortly.', code: 'rate_limit_exceeded' })
 });
+await app.register(clerkPlugin);
 await app.register(rawBody, {
   field: 'rawBody',
   global: false,
