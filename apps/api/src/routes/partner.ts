@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { pool } from '../db.js';
 import { env } from '../config.js';
 import { fail, noStore } from '../http.js';
-import { createLeadRecord } from '../domain.js';
+import { createLeadRecord, HotelPropertyUnavailableError } from '../domain.js';
 import { hitRateLimit, sha256 } from '../security.js';
 import { leadSchema } from '../validation.js';
 
@@ -59,7 +59,8 @@ export async function registerPartnerRoutes(app: FastifyInstance): Promise<void>
         await pool.query('UPDATE sp_partner_api_keys SET last_used_at=now() WHERE id=$1 AND is_active=true', [key.id]);
         noStore(reply);
         return reply.code(201).send({ ok: true, lead_id: lead.id, status: lead.status });
-      } catch {
+      } catch (error) {
+        if (error instanceof HotelPropertyUnavailableError) return fail(reply, 422, error.message, 'hotel_property_unavailable');
         const raced = await pool.query<{ request_hash: string; lead_id: string }>(
           'SELECT request_hash, lead_id FROM sp_partner_requests WHERE api_key_id=$1 AND idempotency_key=$2 LIMIT 1', [key.id, idempotencyKey]
         );
