@@ -2,16 +2,19 @@
 
 Real credentials must be created or authorized in the corresponding provider account. The backend cannot invent valid external account keys. No real provider secrets are present in this bundle.
 
-## Clerk (authentication)
+## Auth.js / Google (authentication)
 
-1. Create a Clerk application owned by the intended StayPilot operator.
-2. Copy the publishable key to Vercel as `VITE_CLERK_PUBLISHABLE_KEY` and the matching secret key to Railway as `CLERK_SECRET_KEY`.
-3. Add the same publishable key to Railway as `CLERK_PUBLISHABLE_KEY`.
-4. Configure allowed application origins and sign-in behavior in Clerk; use production keys for production.
-5. Create the intended first owner account and set the user's real `user_…` ID as Railway's `OWNER_CLERK_USER_ID` before first API sign-in.
-6. Other users require both an authenticated Clerk session and a verified email matching an unexpired StayPilot invitation. The invitation endpoint currently creates a database access grant but does not send an email or create a Clerk invitation automatically.
+1. Create a Google OAuth client in Google Cloud Console for the StayPilot web application.
+2. Add the exact Auth.js callback URI: `https://YOUR-VERCEL-DOMAIN/api/auth/callback/google`.
+3. Set `AUTH_GOOGLE_ID` and `AUTH_GOOGLE_SECRET` in Vercel server-side environment variables only.
+4. Set a unique `AUTH_SECRET` for encrypted Auth.js sessions. Do not reuse the API signing secret.
+5. Set `API_AUTH_SECRET` to a separate random value of at least 32 characters in both Vercel and Railway. The API verifies tokens signed by the Next.js server using this secret.
+6. Set the same exact `AUTH_TOKEN_ISSUER` in Vercel and Railway. API tokens are audience-restricted to `staypilot-api` and expire after five minutes.
+7. Google sign-in is accepted only when Google's profile reports `email_verified=true`. The API still requires a workspace membership or a verified-email invitation.
 
-The API accepts Clerk-validated session tokens; it does not accept a client-supplied user ID or role as proof of identity. It uses the Clerk Backend API only when a user without an existing workspace membership must have their verified email checked.
+## Manual test credentials
+
+The Credentials provider is disabled unless `TEST_LOGIN_ENABLED=true`. It accepts one exact `TEST_LOGIN_EMAIL` and a bcrypt `TEST_LOGIN_PASSWORD_HASH` stored in Vercel server-side variables. The same feature flag and email must be configured on Railway. The API provisions this identity only into the synthetic `test` workspace. Never enable the provider without a strong unique password, and do not put the plaintext password or hash in GitHub.
 
 ## Meta (WhatsApp, Facebook, Instagram inbound events)
 
