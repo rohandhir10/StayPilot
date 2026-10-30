@@ -3,9 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": {
-    "node": ">=22.0.0"
-  },
+  "engines": { "node": ">=22.0.0" },
   "scripts": {
     "dev": "node -r dotenv/config --import tsx --watch src/server.ts",
     "build": "tsc -p tsconfig.json",
@@ -27,7 +25,8 @@
     "pg": "^8.16.3",
     "zod": "^3.25.76",
     "dotenv": "^17.2.2",
-    "firebase-admin": "^14.5.0"
+    "firebase-admin": "^14.5.0",
+    "jose": "^6.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.19.0",
