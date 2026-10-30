@@ -27,7 +27,8 @@
     "pg": "^8.16.3",
     "zod": "^4.6.7",
     "dotenv": "^17.2.2",
-    "jose": "^6.1.0"
+    "jose": "^6.1.0",
+    "@clerk/fastify": "^3.1.95"
   },
   "devDependencies": {
     "@types/node": "^22.19.0",
