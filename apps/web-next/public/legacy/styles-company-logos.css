@@ -1,0 +1,15 @@
+
+
+/* Official third-party brand marks in the integrations grid */
+.integration-icon{display:grid;place-items:center;overflow:hidden}
+.integration-company-logo{display:block;width:26px;height:26px;object-fit:contain}
+.integration-company-logo.brand-whatsapp{width:27px;height:27px}
+.integration-company-logo.brand-gmail,.integration-company-logo.brand-outlook{width:25px;height:25px}
+.integration-company-logo.brand-instagram,.integration-company-logo.brand-messenger{width:26px;height:26px}
+.integration-company-logo.brand-booking,.integration-company-logo.brand-expedia{width:25px;height:25px}
+.integration-generic-icon{display:grid;place-items:center;width:28px;height:28px;font-size:20px;line-height:1;font-weight:700;color:#536c91}
+.integration-icon.brand-whatsapp{background:#e8f7ee}
+.integration-icon.brand-gmail,.integration-icon.brand-outlook{background:#edf2ff}
+.integration-icon.brand-instagram{background:#fff0f4}
+.integration-icon.brand-messenger{background:#edf3ff}
+.integration-icon.brand-booking,.integration-icon.brand-expedia{background:#f1f4fb}
