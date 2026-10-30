@@ -9,6 +9,7 @@ import { env } from './config.js';
 import { closeDatabase, checkDatabase, checkSchemaReady } from './db.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerWorkspaceRoutes } from './routes/workspace.js';
+import { registerPropertyRoutes } from './routes/properties.js';
 import { registerLeadRoutes } from './routes/leads.js';
 import { registerInboxRoutes } from './routes/inbox.js';
 import { registerChannelRoutes } from './routes/channels.js';
@@ -96,6 +97,7 @@ app.setErrorHandler((error, request, reply) => {
 
 await registerHealthRoutes(app);
 await registerWorkspaceRoutes(app);
+await registerPropertyRoutes(app);
 await registerLeadRoutes(app);
 await registerInboxRoutes(app);
 await registerChannelRoutes(app);
