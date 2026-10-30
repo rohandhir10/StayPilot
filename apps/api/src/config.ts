@@ -21,9 +21,10 @@ const schema = z.object({
   DATABASE_SSL_REJECT_UNAUTHORIZED: booleanValue.default(true),
   DATABASE_SSL_CA: z.preprocess(value => value === '' ? undefined : value, z.string().min(1).optional()),
   DATABASE_SSL_SERVERNAME: z.preprocess(value => value === '' ? undefined : value, z.string().min(1).optional()),
-  FIREBASE_PROJECT_ID: z.preprocess(value => value === '' ? undefined : value, z.string().min(1).optional()),
-  FIREBASE_SERVICE_ACCOUNT_JSON: z.preprocess(value => value === '' ? undefined : value, z.string().min(1).optional()),
-  OWNER_FIREBASE_UID: z.preprocess(value => value === '' ? undefined : value, z.string().min(1).max(128).optional()),
+  API_AUTH_SECRET: z.preprocess(value => value === '' ? undefined : value, z.string().min(32).optional()),
+  AUTH_TOKEN_ISSUER: z.preprocess(value => value === '' ? undefined : value, z.string().url().optional()),
+  OWNER_EMAIL: z.preprocess(value => value === '' ? undefined : value,
+    z.string().email().transform(value => value.trim().toLowerCase()).optional()),
   WEB_ORIGINS: z.string().min(1),
   META_APP_SECRET: z.preprocess(value => value === '' ? undefined : value, z.string().min(1).optional()),
   META_WEBHOOK_VERIFY_TOKEN: z.preprocess(value => value === '' ? undefined : value, z.string().min(24).optional()),
@@ -42,6 +43,10 @@ if (!parsed.success) {
   throw new Error(`Invalid StayPilot API configuration: ${issues}`);
 }
 
+if (Boolean(parsed.data.API_AUTH_SECRET) !== Boolean(parsed.data.AUTH_TOKEN_ISSUER)) {
+  throw new Error('API_AUTH_SECRET and AUTH_TOKEN_ISSUER must be configured together.');
+}
+
 if (parsed.data.NODE_ENV === 'production') {
   const origins = parsed.data.WEB_ORIGINS.split(',').map(s => s.trim()).filter(Boolean);
   const invalidOrigin = origins.some(origin => {
@@ -54,9 +59,8 @@ if (parsed.data.NODE_ENV === 'production') {
   if (!parsed.data.DATABASE_SSL) {
     throw new Error('DATABASE_SSL=true is required in production; use a database TLS connection with certificate verification enabled.');
   }
-  const authSettingsProvided = Boolean(parsed.data.FIREBASE_PROJECT_ID || parsed.data.FIREBASE_SERVICE_ACCOUNT_JSON || parsed.data.OWNER_FIREBASE_UID);
-  if (authSettingsProvided && (!parsed.data.FIREBASE_PROJECT_ID || !parsed.data.FIREBASE_SERVICE_ACCOUNT_JSON || !parsed.data.OWNER_FIREBASE_UID)) {
-    throw new Error('Firebase auth configuration must include FIREBASE_PROJECT_ID, FIREBASE_SERVICE_ACCOUNT_JSON, and OWNER_FIREBASE_UID together.');
+  if (!parsed.data.API_AUTH_SECRET || !parsed.data.AUTH_TOKEN_ISSUER) {
+    throw new Error('API_AUTH_SECRET and AUTH_TOKEN_ISSUER are required for Google sign-in in production.');
   }
   if (parsed.data.DATABASE_SSL && !parsed.data.DATABASE_SSL_REJECT_UNAUTHORIZED) {
     throw new Error('Production database TLS certificate verification must remain enabled.');
@@ -75,9 +79,9 @@ export const env = Object.freeze({
     ...(parsed.data.DATABASE_SSL_CA ? { ca: parsed.data.DATABASE_SSL_CA } : {}),
     ...(parsed.data.DATABASE_SSL_SERVERNAME ? { servername: parsed.data.DATABASE_SSL_SERVERNAME } : {})
   } : false,
-  firebaseProjectId: parsed.data.FIREBASE_PROJECT_ID,
-  firebaseServiceAccountJson: parsed.data.FIREBASE_SERVICE_ACCOUNT_JSON,
-  ownerFirebaseUid: parsed.data.OWNER_FIREBASE_UID,
+  apiAuthSecret: parsed.data.API_AUTH_SECRET,
+  authTokenIssuer: parsed.data.AUTH_TOKEN_ISSUER,
+  ownerEmail: parsed.data.OWNER_EMAIL,
   webOrigins: parsed.data.WEB_ORIGINS.split(',').map(s => s.trim()).filter(Boolean),
   metaAppSecret: parsed.data.META_APP_SECRET,
   metaWebhookVerifyToken: parsed.data.META_WEBHOOK_VERIFY_TOKEN,
