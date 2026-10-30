@@ -4,7 +4,6 @@ import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rawBody from 'fastify-raw-body';
 import rateLimit from '@fastify/rate-limit';
-import { clerkPlugin } from '@clerk/fastify';
 import { env } from './config.js';
 import { closeDatabase, checkDatabase, checkSchemaReady } from './db.js';
 import { registerHealthRoutes } from './routes/health.js';
@@ -62,7 +61,6 @@ await app.register(rawBody, {
   runFirst: true,
   routes: ['/api/webhooks/meta']
 });
-await app.register(clerkPlugin);
 
 app.addHook('onSend', async (request, reply, payload) => {
   reply.header('X-Request-Id', request.id);
