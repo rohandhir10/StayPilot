@@ -62,12 +62,13 @@ async function bootstrapConfiguredOwner(profile: AuthProfile): Promise<void> {
   );
 }
 
-async function acceptMatchingInvite(profile: AuthProfile, workspaceId = await getDefaultWorkspaceId()): Promise<void> {
+async function acceptMatchingInvite(profile: AuthProfile, workspaceId?: string): Promise<void> {
+  const targetWorkspaceId = workspaceId || await getDefaultWorkspaceId();
   await inTransaction(async client => {
     const invitation = await client.query<{ id: string; role: MemberRole }>(
       `SELECT id, role FROM workspace_invites
        WHERE workspace_id = $1 AND email = $2 AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > now()
-       ORDER BY created_at DESC LIMIT 1 FOR UPDATE`, [workspaceId, profile.email]
+       ORDER BY created_at DESC LIMIT 1 FOR UPDATE`, [targetWorkspaceId, profile.email]
     );
     const row = invitation.rows[0];
     if (!row) return;
@@ -82,12 +83,12 @@ async function acceptMatchingInvite(profile: AuthProfile, workspaceId = await ge
        VALUES ($1, $2, $3, $4, $5, true)
        ON CONFLICT (workspace_id, email) DO UPDATE SET user_id = EXCLUDED.user_id, display_name = EXCLUDED.display_name,
          role = EXCLUDED.role, is_active = true, updated_at = now()`,
-      [workspaceId, profile.id, profile.email, profile.name, row.role]
+      [targetWorkspaceId, profile.id, profile.email, profile.name, row.role]
     );
     await client.query(
       `INSERT INTO sp_audit_events (workspace_id, actor_user_id, actor_email, action, entity_type, entity_id, metadata)
        VALUES ($1, $2, $3, 'team.invitation_accepted', 'workspace_invite', $4, '{}'::jsonb)`,
-      [workspaceId, profile.id, profile.email, row.id]
+      [targetWorkspaceId, profile.id, profile.email, row.id]
     );
   });
 }
