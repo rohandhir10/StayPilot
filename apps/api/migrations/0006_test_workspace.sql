@@ -18,3 +18,11 @@ CROSS JOIN (VALUES
 ) AS v(client_name,company_name,client_email,client_phone,agent_name,agent_email,property_name,inquiry_type,start_days,end_days,guests,estimated_value,source,status,assigned_to,followup_hours,notes)
 WHERE w.slug = 'test'
 AND NOT EXISTS (SELECT 1 FROM leads existing WHERE existing.workspace_id = w.id);
+
+INSERT INTO sp_channel_connections (workspace_id, channel_key, provider, display_name, status, connection_mode)
+SELECT test.id, source.channel_key, source.provider, source.display_name, 'not_connected', source.connection_mode
+FROM workspaces test
+JOIN workspaces production ON production.slug = 'default'
+JOIN sp_channel_connections source ON source.workspace_id = production.id
+WHERE test.slug = 'test'
+ON CONFLICT (workspace_id, channel_key) DO NOTHING;
