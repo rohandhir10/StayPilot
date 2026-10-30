@@ -20,9 +20,9 @@ const schema = z.object({
   DATABASE_POOL_MAX: integerFromEnv(10, 1, 50),
   DATABASE_SSL: booleanValue.default(false),
   DATABASE_SSL_REJECT_UNAUTHORIZED: booleanValue.default(true),
-  CLERK_PUBLISHABLE_KEY: z.string().min(1),
-  CLERK_SECRET_KEY: z.string().min(1),
-  OWNER_CLERK_USER_ID: z.preprocess(value => value === '' ? undefined : value, z.string().min(1).optional()),
+  API_AUTH_SECRET: z.string().min(32),
+  AUTH_TOKEN_ISSUER: z.string().url(),
+  OWNER_EMAIL: z.string().email().transform(value => value.trim().toLowerCase()),
   WEB_ORIGINS: z.string().min(1),
   META_APP_SECRET: z.preprocess(value => value === '' ? undefined : value, z.string().min(1).optional()),
   META_WEBHOOK_VERIFY_TOKEN: z.preprocess(value => value === '' ? undefined : value, z.string().min(24).optional()),
@@ -81,12 +81,6 @@ if (parsed.data.NODE_ENV === 'production') {
   if (parsed.data.TRUSTED_PROXY_CIDRS.length === 0) {
     throw new Error('TRUSTED_PROXY_CIDRS must list the verified ingress proxy IP addresses/CIDR ranges in production; do not trust forwarded headers from every peer.');
   }
-  if (!parsed.data.OWNER_CLERK_USER_ID || !parsed.data.OWNER_CLERK_USER_ID.startsWith('user_') || parsed.data.OWNER_CLERK_USER_ID.includes('REPLACE')) {
-    throw new Error('OWNER_CLERK_USER_ID must be the real Clerk user ID of the intended workspace owner.');
-  }
-  if (!parsed.data.CLERK_PUBLISHABLE_KEY.startsWith('pk_live_') || !parsed.data.CLERK_SECRET_KEY.startsWith('sk_live_')) {
-    throw new Error('Production requires live Clerk publishable/secret keys. Development test keys are not allowed in NODE_ENV=production.');
-  }
   if (parsed.data.DATABASE_SSL && !parsed.data.DATABASE_SSL_REJECT_UNAUTHORIZED) {
     throw new Error('Production database TLS certificate verification must remain enabled.');
   }
@@ -100,9 +94,9 @@ export const env = Object.freeze({
   databaseUrl: parsed.data.DATABASE_URL,
   databasePoolMax: parsed.data.DATABASE_POOL_MAX,
   databaseSsl: parsed.data.DATABASE_SSL ? { rejectUnauthorized: parsed.data.DATABASE_SSL_REJECT_UNAUTHORIZED } : false,
-  clerkPublishableKey: parsed.data.CLERK_PUBLISHABLE_KEY,
-  clerkSecretKey: parsed.data.CLERK_SECRET_KEY,
-  ownerClerkUserId: parsed.data.OWNER_CLERK_USER_ID,
+  apiAuthSecret: parsed.data.API_AUTH_SECRET,
+  authTokenIssuer: parsed.data.AUTH_TOKEN_ISSUER,
+  ownerEmail: parsed.data.OWNER_EMAIL,
   webOrigins: parsed.data.WEB_ORIGINS.split(',').map(s => s.trim()).filter(Boolean),
   metaAppSecret: parsed.data.META_APP_SECRET,
   metaWebhookVerifyToken: parsed.data.META_WEBHOOK_VERIFY_TOKEN,
