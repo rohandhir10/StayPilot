@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { pool, inTransaction } from '../db.js';
 import { requireWorkspaceMember, type MemberRole } from '../auth.js';
 import { fail, noStore } from '../http.js';
-import { createLeadRecord, auditEvent } from '../domain.js';
+import { createLeadRecord, auditEvent, HotelPropertyUnavailableError } from '../domain.js';
 import { leadSchema, leadUpdateSchema } from '../validation.js';
 
 const writerRoles: MemberRole[] = ['owner', 'admin', 'sales'];
@@ -62,7 +62,8 @@ export async function registerLeadRoutes(app: FastifyInstance): Promise<void> {
       });
       noStore(reply);
       return reply.code(201).send({ lead });
-    } catch {
+    } catch (error) {
+      if (error instanceof HotelPropertyUnavailableError) return fail(reply, 422, error.message, 'hotel_property_unavailable');
       return fail(reply, 500, 'Could not save the inquiry.', 'lead_create_failed');
     }
   });
