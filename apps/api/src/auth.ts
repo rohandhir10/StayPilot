@@ -99,8 +99,7 @@ export async function requireWorkspaceMember(
     await pool.query(
       `INSERT INTO workspace_members (workspace_id, user_id, email, display_name, role, is_active)
        SELECT id, $1, $2, $3, 'admin', true FROM workspaces WHERE slug = 'test'
-       ON CONFLICT (workspace_id, email) DO UPDATE SET user_id = EXCLUDED.user_id,
-         display_name = EXCLUDED.display_name, role = 'admin', is_active = true, updated_at = now()`,
+       ON CONFLICT (workspace_id, email) DO NOTHING`,
       [profile.id, profile.email, profile.name]
     );
     const testResult = await pool.query<WorkspaceMember & { is_active: boolean }>(
