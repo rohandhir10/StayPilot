@@ -20,9 +20,12 @@ const schema = z.object({
   DATABASE_POOL_MAX: integerFromEnv(10, 1, 50),
   DATABASE_SSL: booleanValue.default(false),
   DATABASE_SSL_REJECT_UNAUTHORIZED: booleanValue.default(true),
-  API_AUTH_SECRET: z.string().min(32),
-  AUTH_TOKEN_ISSUER: z.string().url(),
-  OWNER_EMAIL: z.string().email().transform(value => value.trim().toLowerCase()),
+  API_AUTH_SECRET: z.preprocess(value => value === '' ? undefined : value, z.string().min(32).optional()),
+  AUTH_TOKEN_ISSUER: z.preprocess(value => value === '' ? undefined : value, z.string().url().optional()),
+  OWNER_EMAIL: z.preprocess(value => value === '' ? undefined : value, z.string().email().transform(value => value.trim().toLowerCase()).optional()),
+  CLERK_PUBLISHABLE_KEY: z.string().min(1),
+  CLERK_SECRET_KEY: z.string().min(1),
+  OWNER_CLERK_USER_ID: z.preprocess(value => value === '' ? undefined : value, z.string().min(1).optional()),
   TEST_LOGIN_ENABLED: booleanValue.default(false),
   TEST_LOGIN_EMAIL: z.preprocess(value => value === '' ? undefined : value, z.string().email().transform(value => value.trim().toLowerCase()).optional()),
   WEB_ORIGINS: z.string().min(1),
@@ -50,6 +53,9 @@ if (!parsed.success) {
   throw new Error(`Invalid StayPilot API configuration: ${issues}`);
 }
 
+if (parsed.data.API_AUTH_SECRET && !parsed.data.AUTH_TOKEN_ISSUER) {
+  throw new Error('AUTH_TOKEN_ISSUER is required when API_AUTH_SECRET is configured.');
+}
 if (parsed.data.TEST_LOGIN_ENABLED && !parsed.data.TEST_LOGIN_EMAIL) {
   throw new Error('TEST_LOGIN_EMAIL is required when TEST_LOGIN_ENABLED=true.');
 }
@@ -80,6 +86,12 @@ if (parsed.data.NODE_ENV === 'production') {
   if (origins.length === 0 || invalidOrigin) {
     throw new Error('Production WEB_ORIGINS must contain exact HTTPS origins only (scheme + host + optional port; no paths or wildcard).');
   }
+  if (!parsed.data.OWNER_CLERK_USER_ID || !parsed.data.OWNER_CLERK_USER_ID.startsWith('user_') || parsed.data.OWNER_CLERK_USER_ID.includes('REPLACE')) {
+    throw new Error('OWNER_CLERK_USER_ID must be the real Clerk user ID of the intended initial owner until the Auth.js cutover is complete.');
+  }
+  if (!parsed.data.CLERK_PUBLISHABLE_KEY.startsWith('pk_live_') || !parsed.data.CLERK_SECRET_KEY.startsWith('sk_live_')) {
+    throw new Error('Production requires live Clerk keys during the compatibility period.');
+  }
   if (!parsed.data.DATABASE_SSL) {
     throw new Error('DATABASE_SSL=true is required in production; use a database TLS connection with certificate verification enabled.');
   }
@@ -102,6 +114,9 @@ export const env = Object.freeze({
   apiAuthSecret: parsed.data.API_AUTH_SECRET,
   authTokenIssuer: parsed.data.AUTH_TOKEN_ISSUER,
   ownerEmail: parsed.data.OWNER_EMAIL,
+  clerkPublishableKey: parsed.data.CLERK_PUBLISHABLE_KEY,
+  clerkSecretKey: parsed.data.CLERK_SECRET_KEY,
+  ownerClerkUserId: parsed.data.OWNER_CLERK_USER_ID,
   testLoginEnabled: parsed.data.TEST_LOGIN_ENABLED,
   testLoginEmail: parsed.data.TEST_LOGIN_EMAIL,
   webOrigins: parsed.data.WEB_ORIGINS.split(',').map(s => s.trim()).filter(Boolean),
