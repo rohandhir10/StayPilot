@@ -17,7 +17,7 @@ export default async function LoginPage({ searchParams }: Props) {
     <form action={async () => { 'use server'; await signIn('google', { redirectTo: next }); }}>
       <button className="google-button" type="submit"><span aria-hidden="true">G</span> Continue with Google</button>
     </form>
-    {process.env.TEST_LOGIN_ENABLED === 'true' && <div className="test-login">
+    {process.env.TEST_LOGIN_ENABLED === 'true' && process.env.VERCEL_ENV !== 'production' && <div className="test-login">
       <div className="separator"><span>OR USE TEST ACCESS</span></div>
       <form action={async (formData: FormData) => { 'use server'; await signIn('test-credentials', { email: String(formData.get('email') ?? ''), password: String(formData.get('password') ?? ''), redirectTo: next }); }}>
         <label>Email<input name="email" type="email" autoComplete="username" required maxLength={254}/></label>
