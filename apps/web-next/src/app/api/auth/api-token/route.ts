@@ -15,7 +15,7 @@ export async function GET() {
     return NextResponse.json({ error: 'Authentication service is not configured.' }, { status: 503, headers: { 'Cache-Control': 'no-store' } });
   }
   const now = Math.floor(Date.now() / 1000);
-  const token = await new SignJWT({ email: session.user.email.toLowerCase(), name: session.user.name ?? session.user.email, email_verified: true, auth_provider: 'authjs' })
+  const token = await new SignJWT({ email: session.user.email.toLowerCase(), name: session.user.name ?? session.user.email, email_verified: true, auth_provider: session.user.authProvider ?? 'unknown' })
     .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
     .setSubject(session.user.id)
     .setIssuer(process.env.AUTH_TOKEN_ISSUER ?? 'https://staypilot.app')
