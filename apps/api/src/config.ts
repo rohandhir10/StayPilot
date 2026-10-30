@@ -50,6 +50,9 @@ if (!parsed.success) {
   throw new Error(`Invalid StayPilot API configuration: ${issues}`);
 }
 
+if (parsed.data.TEST_LOGIN_ENABLED && !parsed.data.TEST_LOGIN_EMAIL) {
+  throw new Error('TEST_LOGIN_EMAIL is required when TEST_LOGIN_ENABLED=true.');
+}
 if (parsed.data.OAUTH_TOKEN_ENCRYPTION_KEY && Buffer.from(parsed.data.OAUTH_TOKEN_ENCRYPTION_KEY, 'base64').length !== 32) {
   throw new Error('OAUTH_TOKEN_ENCRYPTION_KEY must be a base64-encoded 32-byte key.');
 }
