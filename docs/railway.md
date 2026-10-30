@@ -36,9 +36,11 @@ Use Railway's Variables UI. Do not add real values to GitHub.
 | `DATABASE_URL` | yes | Reference to private PostgreSQL URL |
 | `DATABASE_SSL` | yes | `true` in production |
 | `DATABASE_SSL_REJECT_UNAUTHORIZED` | yes | `true`; certificate verification must stay enabled |
-| `CLERK_PUBLISHABLE_KEY` | yes | Real `pk_live_…` publishable key from Clerk |
-| `CLERK_SECRET_KEY` | yes | Real `sk_live_…` secret key from Clerk; Railway only |
-| `OWNER_CLERK_USER_ID` | yes | Real `user_…` ID of the intended initial owner |
+| `API_AUTH_SECRET` | yes | Random secret of at least 32 characters; must exactly match the Vercel server-side value. Never expose to browser code |
+| `AUTH_TOKEN_ISSUER` | yes | Exact issuer string used by the Next.js token issuer |
+| `OWNER_EMAIL` | yes | Verified Google email for the initial workspace owner |
+| `TEST_LOGIN_ENABLED` | no | `false` by default. Enable only for the controlled test deployment |
+| `TEST_LOGIN_EMAIL` | when test login enabled | Exact email allowed to use the test-only Credentials provider; must match Vercel |
 | `WEB_ORIGINS` | yes | Comma-separated exact HTTPS origins of approved Vercel production/preview deployments; no paths/wildcard/trailing slash |
 | `TRUSTED_PROXY_CIDRS` | yes | Comma-separated, provider-confirmed ingress proxy IP addresses/CIDR ranges. Keep the allowlist narrow; never use a wildcard or a range that trusts every address. Production startup refuses an empty allowlist. Test spoofed `X-Forwarded-For` values before launch |
 | `DATABASE_POOL_MAX` | recommended | `10` to start; size against Railway Postgres connection limits |
@@ -55,13 +57,13 @@ Use Railway's Variables UI. Do not add real values to GitHub.
 
 ## 5. Bootstrap the first owner
 
-1. Create the Clerk application and configure sign-in (see [provider setup](secrets-and-providers.md)).
+1. Create the Auth.js application and configure sign-in (see [provider setup](secrets-and-providers.md)).
 2. Create the intended owner's account in Clerk, then copy that user's real `user_…` identifier from the Clerk Dashboard.
 3. Set `OWNER_CLERK_USER_ID` in Railway and redeploy.
 4. The owner signs in through the frontend; the first authenticated API request creates the owner membership in the default workspace.
 5. The owner can create StayPilot workspace invitations and partner API keys through the API.
 
-The `/api/team/invites` endpoint creates an access grant but **does not send an email**. Until an email provider/workflow is implemented, use the Clerk Dashboard or your chosen secure channel to invite the person into the Clerk application and give them the frontend sign-in URL. The API will still deny them unless the verified email matches an unexpired StayPilot invite.
+The `/api/team/invites` endpoint creates an access grant but **does not send an email**. Until an email provider/workflow is implemented, use your chosen secure channel to send the person the frontend sign-in URL. The API will still deny them unless the verified email matches an unexpired StayPilot invite.
 
 ## 6. Deployment smoke checks
 
