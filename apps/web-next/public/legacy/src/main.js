@@ -1,11 +1,11 @@
-import { apiRequest } from './lib/api.js';
+import { apiRequest, getActiveWorkspaceId, setActiveWorkspaceId } from './lib/api.js';
 import { waitForAuthReady, signOut } from './lib/auth.js';
 import { renderSalesWorkflow } from './sales-workflows.js';
 import { renderActionCentre } from './action-centre.js';
 
-const PREVIEW_MODE = true;
+const PREVIEW_MODE = new URLSearchParams(window.location.search).get("preview") === "1";
 const $=s=>document.querySelector(s);const $$=s=>[...document.querySelectorAll(s)];
-let leads=[],currentView="overview",searchTerm="",toastTimer,workspaceSession=null,actionCentreConversationOpener=null;
+let hotelProperties=[],leads=[],currentView="overview",searchTerm="",toastTimer,workspaceSession=null,actionCentreConversationOpener=null;
 const demoDate = days => new Date(Date.now() + days * 86400000).toISOString();
 const demoDay = days => demoDate(days).slice(0, 10);
 const demo = [
@@ -35,9 +35,145 @@ async function api(path,opts={}) {
   const token = await user.getIdToken();
   return apiRequest(path, { ...opts, token });
 }
+function renderWorkspaceOptions(workspaces, selectedId="") {
+  const select=$("#workspace-select");
+  if(!select) return;
+  select.replaceChildren();
+  const placeholder=document.createElement("option");
+  placeholder.value="";
+  placeholder.textContent=workspaces.length?"Choose hotel workspace":"No workspaces yet";
+  select.append(placeholder);
+  for(const workspace of workspaces){
+    const option=document.createElement("option");
+    option.value=workspace.id;
+    option.textContent=workspace.name+" · "+(workspace.access_status==="invited"?"Invitation":workspace.role);
+    select.append(option);
+  }
+  select.value=workspaces.some(item=>item.id===selectedId)?selectedId:"";
+  $("#workspace-meta").textContent=workspaces.length===1?"1 workspace available":workspaces.length+" workspaces available";
+}
+
+function showWorkspaceGate(message) {
+  $("#sync-label").textContent="Workspace selection needed";
+  $("#page-title").textContent="Choose your hotel workspace";
+  $("#page-subtitle").textContent=message;
+  ["#metrics",".priority-banner",".dashboard-grid",".leads-panel"].forEach(selector=>$(selector)?.classList.add("hidden"));
+  $("#add-btn").disabled=true;
+  $("#workspace-select")?.focus();
+}
+
+async function readWorkspaceDirectory() {
+  const data=await api("/workspaces");
+  return Array.isArray(data.workspaces)?data.workspaces:[];
+}
+
+function renderPropertySelects() {
+  const active=hotelProperties.filter(item=>item.is_active);
+  const filter=$("#property-filter");
+  if(filter){
+    const chosen=filter.value;
+    filter.replaceChildren(new Option("All properties",""));
+    for(const property of active) filter.append(new Option(property.name,property.name));
+    filter.value=active.some(item=>item.name===chosen)?chosen:"";
+  }
+  const formSelect=$('#lead-form [name="property_name"]');
+  if(formSelect){
+    const chosen=formSelect.value;
+    formSelect.replaceChildren(new Option("Choose a hotel property",""));
+    for(const property of active) {
+      const label=property.city?property.name+" · "+property.city:property.name;
+      formSelect.append(new Option(label,property.name));
+    }
+    formSelect.value=active.some(item=>item.name===chosen)?chosen:"";
+    formSelect.disabled=active.length===0;
+  }
+  const addButton=$("#add-btn");
+  if(addButton && !PREVIEW_MODE){
+    addButton.disabled=active.length===0;
+    addButton.title=active.length===0?"Add an active hotel property before creating inquiries":"Add a new inquiry";
+  }
+}
+
+async function refreshHotelProperties() {
+  const data=await api("/properties");
+  hotelProperties=Array.isArray(data.properties)?data.properties:[];
+  renderPropertySelects();
+  return hotelProperties;
+}
+
+function renderPropertyDirectory(box) {
+  const editable=["owner","admin"].includes(workspaceSession?.workspace?.role);
+  const activeCount=hotelProperties.filter(item=>item.is_active).length;
+  const cards=hotelProperties.map(property=>{
+    const active=Boolean(property.is_active);
+    const actions=editable?(
+      '<form class="property-edit-form" data-property-edit="'+esc(property.id)+'">'+
+        '<label>Property name<input name="name" required minlength="2" maxlength="120" value="'+esc(property.name)+'"></label>'+
+        '<label>City<input name="city" maxlength="120" value="'+esc(property.city||'')+'"></label>'+
+        '<div class="property-card-actions"><span class="property-state '+(active?'active':'inactive')+'">'+(active?'Active':'Archived')+'</span>'+
+        '<button class="btn btn-secondary btn-sm" type="submit">Save changes</button>'+
+        '<button class="btn btn-secondary btn-sm" type="button" data-property-toggle="'+esc(property.id)+'" '+(active&&activeCount<=1?'disabled title="A workspace must keep one active property"':'')+'>'+(active?'Archive':'Reactivate')+'</button></div>'+
+      '</form>'
+    ):('<span class="property-state '+(active?'active':'inactive')+'">'+(active?'Active':'Archived')+'</span>');
+    return '<article class="property-card"><div class="property-card-top"><div class="property-icon">⌂</div><div><h3>'+esc(property.name)+'</h3><p>'+esc(property.city||'City not set')+'</p></div><b class="property-count">'+Number(property.inquiry_count||0)+' inquiries</b></div>'+actions+'</article>';
+  }).join("");
+  box.innerHTML=
+    '<section class="property-directory">'+
+      '<div class="property-directory-head"><div><div class="eyebrow"><span class="eyebrow-line"></span> WORKSPACE SETUP</div><h2>Hotel property directory</h2><p>Manage the hotels whose inquiries belong in this workspace. Archived properties stay visible on historical inquiries but cannot receive new ones.</p></div><div class="property-directory-summary"><b>'+activeCount+'</b><span>active properties</span></div></div>'+
+      (editable?'<form id="property-create-form" class="property-create-form"><label>Property name<input name="name" required minlength="2" maxlength="120" placeholder="e.g. The Grand Delhi"></label><label>City (optional)<input name="city" maxlength="120" placeholder="e.g. New Delhi"></label><button class="btn btn-primary" type="submit">Add property <span>→</span></button></form>':'<p class="property-permission-note">Only workspace owners and administrators can add, rename or archive properties.</p>')+
+      '<div class="property-card-grid">'+(cards||'<div class="empty-state"><b>No properties yet</b><p>Add a hotel property before capturing inquiries.</p></div>')+'</div>'+
+      '<p class="property-directory-note">A property is scoped to this hotel workspace. Creating, renaming or archiving it does not confirm room availability or create a reservation.</p>'+
+    '</section>';
+
+  const createForm=$("#property-create-form");
+  createForm?.addEventListener("submit",async event=>{
+    event.preventDefault();
+    const values=Object.fromEntries(new FormData(createForm).entries());
+    const submit=createForm.querySelector('button[type="submit"]');
+    submit.disabled=true;
+    try{
+      await api("/properties",{method:"POST",body:JSON.stringify(values)});
+      await refreshHotelProperties();
+      renderPropertyDirectory(box);
+      toast("Hotel property added.");
+    }catch(error){toast(error.message||"Could not add the hotel property.",true);}
+    finally{if(submit.isConnected)submit.disabled=false;}
+  });
+  box.querySelectorAll("[data-property-edit]").forEach(form=>{
+    form.addEventListener("submit",async event=>{
+      event.preventDefault();
+      const values=Object.fromEntries(new FormData(form).entries());
+      const submit=form.querySelector('button[type="submit"]');
+      submit.disabled=true;
+      try{
+        await api("/properties/"+encodeURIComponent(form.dataset.propertyEdit),{method:"PATCH",body:JSON.stringify(values)});
+        await refreshHotelProperties();
+        renderPropertyDirectory(box);
+        render();
+        toast("Property details updated. Historical inquiries were retained.");
+      }catch(error){toast(error.message||"Could not update property details.",true);}
+      finally{if(submit.isConnected)submit.disabled=false;}
+    });
+  });
+  box.querySelectorAll("[data-property-toggle]").forEach(button=>{
+    button.addEventListener("click",async()=>{
+      const property=hotelProperties.find(item=>item.id===button.dataset.propertyToggle);
+      if(!property)return;
+      button.disabled=true;
+      try{
+        await api("/properties/"+encodeURIComponent(property.id),{method:"PATCH",body:JSON.stringify({is_active:!property.is_active})});
+        await refreshHotelProperties();
+        renderPropertyDirectory(box);
+        toast(property.is_active?"Property archived. Historical inquiries remain available.":"Property reactivated.");
+      }catch(error){toast(error.message||"Could not update the property.",true);button.disabled=false;}
+    });
+  });
+}
+
 async function loadLeads(){
   if (PREVIEW_MODE) {
     leads=detectDuplicates(demo.map(row=>({...row})));
+    hotelProperties=[...new Set(demo.map(row=>row.property_name))].map((name,index)=>({id:"preview-property-"+index,name,city:"",is_active:true,inquiry_count:leads.filter(row=>row.property_name===name).length}));
     workspaceSession={user:{name:"StayPilot Preview",email:"preview@staypilot.demo"},workspace:{role:"viewer"}};
     $(".profile b").textContent=workspaceSession.user.name;
     $(".profile small").textContent="Read-only preview · sample data";
@@ -48,6 +184,10 @@ async function loadLeads(){
     $("#page-subtitle").textContent="You're viewing sample hotel-sales data. Changes are disabled and nothing is saved.";
     $("#add-btn").disabled=true;
     $("#add-btn").title="Disabled in the read-only preview";
+    renderPropertySelects();
+    $("#workspace-select").innerHTML='<option value="">Public demo preview</option>';
+    $("#workspace-select").disabled=true;
+    $("#workspace-create-btn").hidden=true;
     if (!document.querySelector(".staypilot-preview-banner")) {
       const banner=document.createElement("div");
       banner.className="staypilot-preview-banner";
@@ -60,9 +200,17 @@ async function loadLeads(){
   }
   try {
     workspaceSession=await api("/session");
+    const workspaceId=workspaceSession.workspace?.id||"";
+    if(workspaceId) setActiveWorkspaceId(workspaceId);
+    await refreshHotelProperties();
+    const directory=await readWorkspaceDirectory();
+    renderWorkspaceOptions(directory,workspaceId);
+    $("#workspace-select").disabled=directory.length<=1;
+    $("#workspace-create-btn").hidden=false;
+
     const name=workspaceSession.user?.name||workspaceSession.user?.email||"Sales teammate";
     $(".profile b").textContent=name;
-    $(".profile small").textContent=(workspaceSession.workspace?.role||"team member")+" · StayPilot";
+    $(".profile small").textContent=(workspaceSession.workspace?.role||"team member")+" · "+(directory.find(w=>w.id===workspaceId)?.name||"StayPilot");
     $(".profile .avatar").textContent=initials(name);
     $(".avatar-small").textContent=initials(name);
     if(currentView==="overview")$("#page-title").textContent="Good morning, "+String(name).split(/\s+/)[0];
@@ -73,13 +221,44 @@ async function loadLeads(){
   } catch(e) {
     leads=[];workspaceSession=null;
     if(e.status===401){location.replace("/login?next="+encodeURIComponent(location.pathname+location.search));return;}
-    if(e.status===403){$("#sync-label").textContent="Workspace access required";$("#page-title").textContent="Access needs approval";$("#page-subtitle").textContent=e.message||"Ask the workspace owner to invite this email.";$("#metrics").classList.add("hidden");$(".priority-banner").classList.add("hidden");$(".dashboard-grid").classList.add("hidden");toast("Your account is not yet authorized for this workspace.",true);}
-    else{$("#sync-label").textContent="Connection issue";toast("Could not load the sales workspace. No sample records were substituted.",true);}
+    if(e.code==="workspace_selection_required" || e.code==="workspace_membership_required" || e.code==="member_disabled"){
+      try{
+        const directory=await readWorkspaceDirectory();
+        renderWorkspaceOptions(directory,getActiveWorkspaceId());
+        $("#workspace-create-btn").hidden=false;
+        if(directory.length===1 && directory[0].id!==getActiveWorkspaceId()){
+          setActiveWorkspaceId(directory[0].id);
+          await loadLeads();
+          return;
+        }
+        if(directory.length>0){
+          showWorkspaceGate("Your account has access to more than one hotel workspace. Select the workspace you want to work in; records remain separated.");
+        }else{
+          $("#workspace-meta").textContent="Create your first workspace";
+          showWorkspaceGate("Your account does not have a hotel workspace yet. Create one to start capturing inquiries and inviting your sales team.");
+        }
+        return;
+      }catch{
+        $("#sync-label").textContent="Workspace list unavailable";
+      }
+    }
+    if(e.status===403){
+      $("#sync-label").textContent="Workspace access required";
+      $("#page-title").textContent="Access needs approval";
+      $("#page-subtitle").textContent=e.message||"Ask the workspace owner to invite this email.";
+      $("#metrics").classList.add("hidden");
+      $(".priority-banner").classList.add("hidden");
+      $(".dashboard-grid").classList.add("hidden");
+      toast("Your account is not yet authorized for this workspace.",true);
+    }else{
+      $("#sync-label").textContent="Connection issue";
+      toast("Could not load the sales workspace. No sample records were substituted.",true);
+    }
   }
   leads=detectDuplicates(leads);
   render();
 }
-function openView(view){if(view!=="inbox")actionCentreConversationOpener=null;currentView=view;$$(".nav-item").forEach(b=>b.classList.toggle("active",b.dataset.view===view));const titles={overview:"Overview",inbox:"Unified inbox",channels:"Channels & integrations",leads:"All inquiries",duplicates:"Duplicate intelligence",followups:"Follow-up queue",workflows:"Guided workflows",agents:"Agent network",pipeline:"Sales pipeline",reports:"Reports & insights","action-centre":"Action Centre"};$("#crumb-title").textContent=titles[view]||"Overview";$("#page-title").textContent=({overview:"Good morning, Priya ✳",inbox:"Every conversation. One shared context.",channels:"Connect the channels your team already uses.",leads:"Every inquiry, in one place",duplicates:"Resolve overlap. Protect opportunity.",followups:"Nothing important slips through.",workflows:"Turn hotel enquiries into consistent next steps.",agents:"Your agent network",pipeline:"See every deal move forward",reports:"Sales performance, made visible","action-centre":"Know what needs doing next"})[view]||titles[view];$("#page-subtitle").textContent=({overview:"A clearer picture of every opportunity across your portfolio.",inbox:"Review imported conversations, link inquiries and capture internal notes across connected channels.",channels:"See what each connection needs, what data it should sync, and which integrations are still pending.",leads:"Search, review and manage the full hotel sales pipeline.",duplicates:"Potential overlaps surfaced for your team to review — never auto-merged.",followups:"A focused queue of next actions for the sales team.",workflows:"Prepare hotel-specific follow-ups, validate key details and set the next reminder. Nothing is sent automatically.",agents:"Understand the partners behind your hotel inquiries.",pipeline:"A shared view of deal stages, ownership and estimated value.",reports:"A practical snapshot of lead quality, response and conversion.","action-centre":"Tasks suggested from CRM records and connected conversations, with evidence attached for verification."})[view]||"";const overview=view==="overview";$("#metrics").classList.toggle("hidden",!overview);$(".priority-banner").classList.toggle("hidden",!overview);$(".dashboard-grid").classList.toggle("hidden",!overview);$(".leads-panel").classList.toggle("hidden",!["overview","leads","duplicates","followups","pipeline"].includes(view));$("#extra-view")?.remove();if(view==="agents"||view==="reports"){const box=document.createElement("section");box.id="extra-view";box.className="view-placeholder";box.innerHTML=view==="agents"?'<div style="font-size:28px;color:#c6a36d">♧</div><h2>Agent relationship intelligence</h2><p>Review partner activity and opportunity history. This MVP groups agent activity from inquiry records; commission and attribution rules should be validated before adding them.</p><button class="btn btn-primary">Export agent summary →</button>':'<div style="font-size:28px;color:#c6a36d">▤</div><h2>Insights grounded in your pipeline</h2><p>Explore stage distribution, estimated value, overdue follow-ups and duplicate-review volume. Sample records are illustrative.</p><button class="btn btn-primary">Export report →</button>';$(".leads-panel").before(box);box.querySelector("button").addEventListener("click",exportCsv);}if(view==="inbox"||view==="channels")renderChannelWorkspace(view);if(view==="action-centre"){const box=document.createElement("section");box.id="extra-view";box.className="action-centre-shell";$(".leads-panel").before(box);renderActionCentre(box,{leads,api,workspaceSession,isPreview:PREVIEW_MODE,toast,onOpenLead:id=>openDetail(id),onOpenConversation:async id=>{openView("inbox");if(actionCentreConversationOpener)await actionCentreConversationOpener(id);}});}if(view==="workflows"){const box=document.createElement("section");box.id="extra-view";box.className="sales-workflow-workspace";$(".leads-panel").before(box);renderSalesWorkflow(box,{leads,api,workspaceSession,isPreview:PREVIEW_MODE,toast,onUpdated:async()=>{await loadLeads();openView("workflows");}});}render();window.scrollTo({top:0,behavior:"smooth"});}
+function openView(view){if(view!=="inbox")actionCentreConversationOpener=null;currentView=view;$$(".nav-item").forEach(b=>b.classList.toggle("active",b.dataset.view===view));const titles={overview:"Overview",inbox:"Unified inbox",channels:"Channels & integrations",leads:"All inquiries",duplicates:"Duplicate intelligence",followups:"Follow-up queue",workflows:"Guided workflows",agents:"Agent network",pipeline:"Sales pipeline",reports:"Reports & insights","action-centre":"Action Centre",properties:"Hotel properties"};$("#crumb-title").textContent=titles[view]||"Overview";$("#page-title").textContent=({overview:"Good morning, Priya ✳",inbox:"Every conversation. One shared context.",channels:"Connect the channels your team already uses.",leads:"Every inquiry, in one place",duplicates:"Resolve overlap. Protect opportunity.",followups:"Nothing important slips through.",workflows:"Turn hotel enquiries into consistent next steps.",agents:"Your agent network",pipeline:"See every deal move forward",reports:"Sales performance, made visible","action-centre":"Know what needs doing next",properties:"Manage the hotels in this workspace."})[view]||titles[view];$("#page-subtitle").textContent=({overview:"A clearer picture of every opportunity across your portfolio.",inbox:"Review imported conversations, link inquiries and capture internal notes across connected channels.",channels:"See what each connection needs, what data it should sync, and which integrations are still pending.",leads:"Search, review and manage the full hotel sales pipeline.",duplicates:"Potential overlaps surfaced for your team to review — never auto-merged.",followups:"A focused queue of next actions for the sales team.",workflows:"Prepare hotel-specific follow-ups, validate key details and set the next reminder. Nothing is sent automatically.",agents:"Understand the partners behind your hotel inquiries.",pipeline:"A shared view of deal stages, ownership and estimated value.",reports:"A practical snapshot of lead quality, response and conversion.","action-centre":"Tasks suggested from CRM records and connected conversations, with evidence attached for verification."})[view]||"";const overview=view==="overview";$("#metrics").classList.toggle("hidden",!overview);$(".priority-banner").classList.toggle("hidden",!overview);$(".dashboard-grid").classList.toggle("hidden",!overview);$(".leads-panel").classList.toggle("hidden",!["overview","leads","duplicates","followups","pipeline"].includes(view));$("#extra-view")?.remove();if(view==="agents"||view==="reports"){const box=document.createElement("section");box.id="extra-view";box.className="view-placeholder";box.innerHTML=view==="agents"?'<div style="font-size:28px;color:#c6a36d">♧</div><h2>Agent relationship intelligence</h2><p>Review partner activity and opportunity history. This MVP groups agent activity from inquiry records; commission and attribution rules should be validated before adding them.</p><button class="btn btn-primary">Export agent summary →</button>':'<div style="font-size:28px;color:#c6a36d">▤</div><h2>Insights grounded in your pipeline</h2><p>Explore stage distribution, estimated value, overdue follow-ups and duplicate-review volume. Sample records are illustrative.</p><button class="btn btn-primary">Export report →</button>';$(".leads-panel").before(box);box.querySelector("button").addEventListener("click",exportCsv);}if(view==="properties"){const box=document.createElement("section");box.id="extra-view";$(".leads-panel").before(box);renderPropertyDirectory(box);}if(view==="inbox"||view==="channels")renderChannelWorkspace(view);if(view==="action-centre"){const box=document.createElement("section");box.id="extra-view";box.className="action-centre-shell";$(".leads-panel").before(box);renderActionCentre(box,{leads,api,workspaceSession,isPreview:PREVIEW_MODE,toast,onOpenLead:id=>openDetail(id),onOpenConversation:async id=>{openView("inbox");if(actionCentreConversationOpener)await actionCentreConversationOpener(id);}});}if(view==="workflows"){const box=document.createElement("section");box.id="extra-view";box.className="sales-workflow-workspace";$(".leads-panel").before(box);renderSalesWorkflow(box,{leads,api,workspaceSession,isPreview:PREVIEW_MODE,toast,onUpdated:async()=>{await loadLeads();openView("workflows");}});}render();window.scrollTo({top:0,behavior:"smooth"});}
 const channelCatalog=[
 {name:"WhatsApp Business",key:"whatsapp",detail:"Inbound business messages",priority:"P1",setup:"Connect an eligible Meta Business account, approve required permissions and subscribe the verified webhook."},
 {name:"Gmail",key:"email_gmail",detail:"Read-only shared mailbox sync",priority:"P1",setup:"Connect a Google OAuth app in the approved provider integration settings. Google may require verification/security review for Gmail restricted scopes."},
@@ -322,4 +501,42 @@ if(signOutButton){
     try{await signOut();}finally{location.replace("/login");}
   });
 }
+const workspaceSelect=$("#workspace-select");
+workspaceSelect?.addEventListener("change",()=>{
+  if(!workspaceSelect.value) return;
+  setActiveWorkspaceId(workspaceSelect.value);
+  location.reload();
+});
+function closeWorkspaceModal(){ $("#workspace-modal-backdrop")?.classList.remove("open"); }
+$("#workspace-create-btn")?.addEventListener("click",()=>{
+  if(PREVIEW_MODE){toast("Workspace creation is disabled in the public preview.");return;}
+  $("#workspace-modal-backdrop")?.classList.add("open");
+  $("#workspace-form input[name=name]")?.focus();
+});
+$("#workspace-modal-close")?.addEventListener("click",closeWorkspaceModal);
+$("#workspace-cancel")?.addEventListener("click",closeWorkspaceModal);
+$("#workspace-modal-backdrop")?.addEventListener("click",event=>{
+  if(event.target?.id==="workspace-modal-backdrop") closeWorkspaceModal();
+});
+$("#workspace-form")?.addEventListener("submit",async event=>{
+  event.preventDefault();
+  if(PREVIEW_MODE){toast("Workspace creation is disabled in the public preview.",true);return;}
+  const form=event.currentTarget;
+  const name=String(new FormData(form).get("name")||"").trim();
+  const submit=$("#workspace-submit");
+  if(!name){toast("Enter a hotel or portfolio name.",true);return;}
+  submit.disabled=true;
+  try{
+    const result=await api("/workspaces",{method:"POST",body:JSON.stringify({name})});
+    const workspaceId=result.workspace?.id;
+    if(typeof workspaceId!=="string"||!workspaceId) throw new Error("The workspace was created but its identifier was not returned. Contact support before retrying.");
+    setActiveWorkspaceId(workspaceId);
+    closeWorkspaceModal();
+    location.reload();
+  }catch(error){
+    toast(error.message||"Could not create the workspace.",true);
+  }finally{
+    submit.disabled=false;
+  }
+});
 loadLeads();

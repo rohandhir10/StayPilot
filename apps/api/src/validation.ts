@@ -81,6 +81,19 @@ export const leadUpdateSchema = z.object({
   notes: z.string().trim().max(5000).optional()
 }).refine(value => ['status', 'assigned_to', 'next_follow_up', 'notes'].some(key => Object.hasOwn(value, key)), { message: 'No supported fields to update.' });
 
+export const hotelPropertyCreateSchema = z.object({
+  name: z.string().trim().min(2).max(120),
+  city: z.string().trim().max(120).optional().default('')
+});
+
+export const hotelPropertyUpdateSchema = z.object({
+  name: z.string().trim().min(2).max(120).optional(),
+  city: z.string().trim().max(120).optional(),
+  is_active: z.boolean().optional()
+}).refine(value => Object.keys(value).length > 0, {
+  message: 'Provide a property name, city or active status to update.'
+});
+
 export const inviteSchema = z.object({
   email: z.string().trim().email().max(254).transform(v => v.toLowerCase()),
   role: z.enum(['admin', 'sales', 'viewer'])

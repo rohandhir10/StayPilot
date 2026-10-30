@@ -9,6 +9,7 @@ import { env } from './config.js';
 import { closeDatabase, checkDatabase, checkSchemaReady } from './db.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerWorkspaceRoutes } from './routes/workspace.js';
+import { registerPropertyRoutes } from './routes/properties.js';
 import { registerLeadRoutes } from './routes/leads.js';
 import { registerInboxRoutes } from './routes/inbox.js';
 import { registerChannelRoutes } from './routes/channels.js';
@@ -42,7 +43,7 @@ await app.register(helmet, {
 await app.register(cors, {
   credentials: false,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Authorization', 'Content-Type', 'Idempotency-Key', 'X-Hub-Signature-256'],
+  allowedHeaders: ['Authorization', 'Content-Type', 'Idempotency-Key', 'X-Hub-Signature-256', 'X-StayPilot-Workspace-ID'],
   exposedHeaders: ['Retry-After', 'X-Request-Id'],
   origin(origin, callback) {
     if (!origin) return callback(null, true); // CLI/server-to-server; auth remains required on private routes.
@@ -96,6 +97,7 @@ app.setErrorHandler((error, request, reply) => {
 
 await registerHealthRoutes(app);
 await registerWorkspaceRoutes(app);
+await registerPropertyRoutes(app);
 await registerLeadRoutes(app);
 await registerInboxRoutes(app);
 await registerChannelRoutes(app);

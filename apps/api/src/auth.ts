@@ -4,6 +4,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { env } from './config.js';
 import { pool, inTransaction } from './db.js';
 import { fail } from './http.js';
+import { resolveWorkspaceMembership } from './workspace-selection.js';
 
 export type MemberRole = 'owner' | 'admin' | 'sales' | 'viewer';
 export type WorkspaceMember = {
@@ -16,7 +17,7 @@ export type WorkspaceMember = {
 const allRoles: MemberRole[] = ['owner', 'admin', 'sales', 'viewer'];
 
 type AuthProfile = { id: string; email: string; name: string; provider: 'google' | 'test-credentials' | 'clerk' };
-async function verifyRequest(request: FastifyRequest): Promise<AuthProfile | null> {
+export async function getAuthenticatedProfile(request: FastifyRequest): Promise<AuthProfile | null> {
   const header = request.headers.authorization;
   if (header?.startsWith('Bearer ') && env.apiAuthSecret && env.authTokenIssuer) {
     const authJsIdentity = await verifyApiToken(header.slice(7), env.apiAuthSecret, env.authTokenIssuer);
@@ -62,13 +63,13 @@ async function bootstrapConfiguredOwner(profile: AuthProfile): Promise<void> {
   );
 }
 
-async function acceptMatchingInvite(profile: AuthProfile): Promise<void> {
-  const workspaceId = await getDefaultWorkspaceId();
+async function acceptMatchingInvite(profile: AuthProfile, workspaceId?: string): Promise<void> {
+  const targetWorkspaceId = workspaceId || await getDefaultWorkspaceId();
   await inTransaction(async client => {
     const invitation = await client.query<{ id: string; role: MemberRole }>(
       `SELECT id, role FROM workspace_invites
        WHERE workspace_id = $1 AND email = $2 AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > now()
-       ORDER BY created_at DESC LIMIT 1 FOR UPDATE`, [workspaceId, profile.email]
+       ORDER BY created_at DESC LIMIT 1 FOR UPDATE`, [targetWorkspaceId, profile.email]
     );
     const row = invitation.rows[0];
     if (!row) return;
@@ -83,12 +84,12 @@ async function acceptMatchingInvite(profile: AuthProfile): Promise<void> {
        VALUES ($1, $2, $3, $4, $5, true)
        ON CONFLICT (workspace_id, email) DO UPDATE SET user_id = EXCLUDED.user_id, display_name = EXCLUDED.display_name,
          role = EXCLUDED.role, is_active = true, updated_at = now()`,
-      [workspaceId, profile.id, profile.email, profile.name, row.role]
+      [targetWorkspaceId, profile.id, profile.email, profile.name, row.role]
     );
     await client.query(
       `INSERT INTO sp_audit_events (workspace_id, actor_user_id, actor_email, action, entity_type, entity_id, metadata)
        VALUES ($1, $2, $3, 'team.invitation_accepted', 'workspace_invite', $4, '{}'::jsonb)`,
-      [workspaceId, profile.id, profile.email, row.id]
+      [targetWorkspaceId, profile.id, profile.email, row.id]
     );
   });
 }
@@ -98,9 +99,20 @@ export async function requireWorkspaceMember(
   reply: FastifyReply,
   allowedRoles: MemberRole[] = allRoles
 ): Promise<WorkspaceMember | null> {
-  const profile = await verifyRequest(request);
+  const profile = await getAuthenticatedProfile(request);
   if (!profile) {
     fail(reply, 401, 'Sign in to access this StayPilot workspace.', 'authentication_required');
+    return null;
+  }
+
+  const rawWorkspaceId = request.headers['x-staypilot-workspace-id'];
+  if (Array.isArray(rawWorkspaceId)) {
+    fail(reply, 400, 'Select one workspace at a time.', 'invalid_workspace_selection');
+    return null;
+  }
+  const selectedWorkspaceId = typeof rawWorkspaceId === 'string' ? rawWorkspaceId.trim() : '';
+  if (selectedWorkspaceId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(selectedWorkspaceId)) {
+    fail(reply, 400, 'The selected workspace identifier is invalid.', 'invalid_workspace_selection');
     return null;
   }
 
@@ -111,17 +123,20 @@ export async function requireWorkspaceMember(
     }
     await pool.query(
       `INSERT INTO workspace_members (workspace_id, user_id, email, display_name, role, is_active)
-       SELECT id, $1, $2, $3, 'sales', true FROM workspaces WHERE slug = 'test'
+       SELECT id, $1, $2, $3, 'sales', true FROM workspaces
+       WHERE slug = 'test' AND ($4::uuid IS NULL OR id = $4)
        ON CONFLICT (workspace_id, email) DO NOTHING`,
-      [profile.id, profile.email, profile.name]
+      [profile.id, profile.email, profile.name, selectedWorkspaceId || null]
     );
     const testResult = await pool.query<WorkspaceMember & { is_active: boolean }>(
-      `SELECT workspace_id, user_id, email, display_name, role, is_active
-       FROM workspace_members WHERE email = $1 AND workspace_id = (SELECT id FROM workspaces WHERE slug = 'test') LIMIT 2`,
-      [profile.email]
+      `SELECT wm.workspace_id, wm.user_id, wm.email, wm.display_name, wm.role, wm.is_active
+       FROM workspace_members wm JOIN workspaces w ON w.id=wm.workspace_id
+       WHERE wm.email=$1 AND w.slug='test' AND ($2::uuid IS NULL OR wm.workspace_id=$2)
+       LIMIT 2`,
+      [profile.email, selectedWorkspaceId || null]
     );
     if (testResult.rows.length !== 1 || !testResult.rows[0]?.is_active) {
-      fail(reply, 403, 'The isolated test workspace is not available.', 'test_workspace_unavailable');
+      fail(reply, 403, 'The selected workspace is not available to this test account.', 'test_workspace_unavailable');
       return null;
     }
     const testMember = testResult.rows[0];
@@ -135,52 +150,73 @@ export async function requireWorkspaceMember(
       display_name: testMember.display_name, role: testMember.role };
   }
 
-  let result = await pool.query<WorkspaceMember & { is_active: boolean }>(
-    `SELECT workspace_id, user_id, email, display_name, role, is_active
-     FROM workspace_members WHERE user_id = $1 OR email = $2
-     ORDER BY CASE WHEN user_id = $1 THEN 0 ELSE 1 END LIMIT 2`, [profile.id, profile.email]
-  );
-
-  if (!result.rows.length) {
-    await bootstrapConfiguredOwner(profile);
-    result = await pool.query<WorkspaceMember & { is_active: boolean }>(
+  const queryMembership = async () => {
+    if (selectedWorkspaceId) {
+      return pool.query<WorkspaceMember & { is_active: boolean }>(
+        `SELECT workspace_id, user_id, email, display_name, role, is_active
+         FROM workspace_members WHERE (user_id=$1 OR email=$2) AND workspace_id=$3
+         ORDER BY CASE WHEN user_id=$1 THEN 0 ELSE 1 END LIMIT 2`,
+        [profile.id, profile.email, selectedWorkspaceId]
+      );
+    }
+    return pool.query<WorkspaceMember & { is_active: boolean }>(
       `SELECT workspace_id, user_id, email, display_name, role, is_active
-       FROM workspace_members WHERE user_id = $1 OR email = $2
-       ORDER BY CASE WHEN user_id = $1 THEN 0 ELSE 1 END LIMIT 2`, [profile.id, profile.email]
+       FROM workspace_members WHERE (user_id=$1 OR email=$2) AND is_active=true
+       ORDER BY CASE WHEN user_id=$1 THEN 0 ELSE 1 END LIMIT 3`,
+      [profile.id, profile.email]
     );
-    if (!result.rows.length && !(profile.provider === 'clerk' ? profile.id === env.ownerClerkUserId : profile.email === env.ownerEmail)) {
-      try { await acceptMatchingInvite(profile); } catch {
+  };
+
+  let result = await queryMembership();
+  if (!result.rows.length) {
+    const isConfiguredOwner = profile.provider === 'clerk'
+      ? Boolean(env.ownerClerkUserId && profile.id === env.ownerClerkUserId)
+      : Boolean(env.ownerEmail && profile.email === env.ownerEmail);
+    if (isConfiguredOwner) {
+      const defaultWorkspaceId = await getDefaultWorkspaceId();
+      if (!selectedWorkspaceId || selectedWorkspaceId === defaultWorkspaceId) {
+        await bootstrapConfiguredOwner(profile);
+        result = await queryMembership();
+      }
+    }
+    if (!result.rows.length) {
+      try {
+        const inviteWorkspaceId = selectedWorkspaceId || await getDefaultWorkspaceId();
+        await acceptMatchingInvite(profile, inviteWorkspaceId);
+      } catch {
         fail(reply, 403, 'Workspace invitation could not be accepted. Ask an owner to review access.', 'invitation_acceptance_failed');
         return null;
       }
-      result = await pool.query<WorkspaceMember & { is_active: boolean }>(
-        `SELECT workspace_id, user_id, email, display_name, role, is_active
-         FROM workspace_members WHERE user_id = $1 OR email = $2
-         ORDER BY CASE WHEN user_id = $1 THEN 0 ELSE 1 END LIMIT 2`, [profile.id, profile.email]
-      );
+      result = await queryMembership();
     }
   }
 
-  if (result.rows.length !== 1) {
-    fail(reply, 403, 'This account is not a member of the StayPilot workspace.', 'workspace_membership_required');
+  const resolution = resolveWorkspaceMembership(result.rows, selectedWorkspaceId || undefined);
+  if (resolution.kind === 'selection_required') {
+    fail(reply, 409, 'Choose a hotel workspace before continuing.', 'workspace_selection_required');
     return null;
   }
-  const member = result.rows[0];
-  if (!member) {
-    fail(reply, 403, 'This account is not a member of the StayPilot workspace.', 'workspace_membership_required');
+  if (resolution.kind === 'disabled') {
+    fail(reply, 403, 'Your StayPilot access has been disabled in this workspace.', 'member_disabled');
     return null;
   }
-  if (!member.is_active) {
-    fail(reply, 403, 'Your StayPilot access has been disabled.', 'member_disabled');
+  if (resolution.kind === 'ambiguous') {
+    fail(reply, 409, 'Workspace membership is ambiguous. Ask an owner to review your access.', 'workspace_membership_ambiguous');
     return null;
   }
+  if (resolution.kind !== 'selected') {
+    fail(reply, 403, 'This account is not a member of the selected StayPilot workspace.', 'workspace_membership_required');
+    return null;
+  }
+  const member = resolution.member;
   if (!allRoles.includes(member.role) || !allowedRoles.includes(member.role)) {
     fail(reply, 403, 'Your workspace role does not permit this action.', 'insufficient_role');
     return null;
   }
   await pool.query('UPDATE workspace_members SET last_seen_at = now() WHERE workspace_id = $1 AND user_id = $2',
     [member.workspace_id, member.user_id]);
-  return { workspace_id: member.workspace_id, user_id: member.user_id, email: member.email, display_name: member.display_name, role: member.role };
+  return { workspace_id: member.workspace_id, user_id: member.user_id, email: member.email,
+    display_name: member.display_name, role: member.role };
 }
 
 export function isOwnerOrAdmin(member: WorkspaceMember): boolean {

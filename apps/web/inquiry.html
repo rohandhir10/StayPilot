@@ -8,7 +8,7 @@
 <div class="field"><label for="client_email">Email address *</label><input id="client_email" name="client_email" type="email" maxlength="254" required autocomplete="email"></div>
 <div class="field"><label for="client_phone">Phone (optional)</label><input id="client_phone" name="client_phone" type="tel" maxlength="32" autocomplete="tel"></div>
 <div class="field"><label for="company_name">Company / organisation (optional)</label><input id="company_name" name="company_name" maxlength="160" autocomplete="organization"></div>
-<div class="field"><label for="property_name">Preferred hotel *</label><select id="property_name" name="property_name" required><option>The LaLiT New Delhi</option><option>The LaLiT Mumbai</option><option>The LaLiT Ashok Bengaluru</option><option>The LaLiT Jaipur</option></select></div>
+<div class="field"><label for="property_name">Preferred hotel *</label><select id="property_name" name="property_name" required><option value="">Choose a hotel</option></select></div>
 <div class="field"><label for="inquiry_type">Inquiry type *</label><select id="inquiry_type" name="inquiry_type" required><option>Corporate stay</option><option>Wedding / social event</option><option>MICE / conference</option><option>Leisure group</option><option>Travel trade</option><option>Other</option></select></div>
 <div class="field"><label for="check_in">Start date (optional)</label><input id="check_in" name="check_in" type="date"></div>
 <div class="field"><label for="check_out">End date (optional)</label><input id="check_out" name="check_out" type="date"></div>
@@ -32,7 +32,18 @@ const captchaToken={value:""};let siteKey="",formStartedAt=Date.now(),widgetId=n
 function say(text,kind){msg.textContent=text||"";msg.className="msg "+(kind||"");}
 async function setup(){
 document.getElementById("form_started_at").value=String(formStartedAt);
-try{const r=await fetch(API_BASE+"/public/form-config",{cache:"no-store"});const d=await r.json();if(!r.ok||!d.site_key){say("The hotel has not finished configuring the form’s security check. Please contact the hotel directly.","error");btn.textContent="Form unavailable";return;}siteKey=d.site_key;}
+try{const r=await fetch(API_BASE+"/public/form-config",{cache:"no-store"});const d=await r.json();if(!r.ok||!d.site_key){say("The hotel has not finished configuring the form’s security check. Please contact the hotel directly.","error");btn.textContent="Form unavailable";return;}siteKey=d.site_key;
+const propertySelect=document.getElementById("property_name");
+const properties=Array.isArray(d.properties)?d.properties:[];
+if(!propertySelect||properties.length===0){say("The hotel has not added any active properties yet. Please contact the hotel directly.","error");btn.textContent="Form unavailable";return;}
+propertySelect.replaceChildren();
+const placeholder=document.createElement("option");placeholder.value="";placeholder.textContent="Choose a hotel";propertySelect.append(placeholder);
+for(const property of properties){
+  if(!property||typeof property.name!=="string"||!property.name.trim())continue;
+  const option=document.createElement("option");option.value=property.name;option.textContent=property.city?property.name+" · "+property.city:property.name;propertySelect.append(option);
+}
+if(propertySelect.options.length===1){say("The hotel has not added any active properties yet. Please contact the hotel directly.","error");btn.textContent="Form unavailable";return;}
+}
 catch(e){say("Could not load the secure form configuration. Please try again later.","error");btn.textContent="Form unavailable";return;}
 const waitForTurnstile=()=>{if(window.turnstile){widgetId=window.turnstile.render("#turnstile-widget",{sitekey:siteKey,callback:token=>{captchaToken.value=token;ready=true;btn.disabled=false;btn.textContent="Send inquiry securely";},"expired-callback":()=>{captchaToken.value="";ready=false;btn.disabled=true;btn.textContent="Complete security check";},"error-callback":()=>{captchaToken.value="";ready=false;btn.disabled=true;say("Security verification failed to load. Refresh the page and try again.","error");}});return;}setTimeout(waitForTurnstile,100);};
 waitForTurnstile();

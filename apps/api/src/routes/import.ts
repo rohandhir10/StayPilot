@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { pool } from '../db.js';
 import { requireWorkspaceMember } from '../auth.js';
 import { fail, noStore } from '../http.js';
-import { createLeadsBatch } from '../domain.js';
+import { createLeadsBatch, HotelPropertyUnavailableError } from '../domain.js';
 import { leadSchema } from '../validation.js';
 
 function normalize(value: unknown): string {
@@ -89,7 +89,8 @@ export async function registerImportRoutes(app: FastifyInstance): Promise<void> 
       const leads = await createLeadsBatch({ workspaceId: member.workspace_id, actor: member, entries });
       noStore(reply);
       return reply.code(201).send({ ok: true, mode: 'commit', created: leads.length, leads, duplicates_reviewed: duplicates.length });
-    } catch {
+    } catch (error) {
+      if (error instanceof HotelPropertyUnavailableError) return fail(reply, 422, error.message, 'hotel_property_unavailable');
       return fail(reply, 500, 'Spreadsheet import failed; the batch was not reported as successful.', 'lead_import_failed');
     }
   });

@@ -2,7 +2,8 @@ import type { FastifyInstance } from 'fastify';
 import { env } from '../config.js';
 import { fail, normalizeEmail, noStore } from '../http.js';
 import { getDefaultWorkspaceId } from '../auth.js';
-import { createLeadRecord } from '../domain.js';
+import { pool } from '../db.js';
+import { createLeadRecord, HotelPropertyUnavailableError } from '../domain.js';
 import { hitRateLimit } from '../security.js';
 import { publicLeadSchema } from '../validation.js';
 
@@ -23,7 +24,22 @@ export async function registerPublicInquiryRoutes(app: FastifyInstance): Promise
     if (!env.turnstileSiteKey || !env.turnstileSecretKey) {
       return fail(reply, 503, 'Website inquiry protection is not configured.', 'captcha_setup_required');
     }
-    return reply.send({ captcha_required: true, captcha_provider: 'cloudflare_turnstile', site_key: env.turnstileSiteKey });
+    try {
+      const workspaceId = await getDefaultWorkspaceId();
+      const { rows } = await pool.query<{ name: string; city: string }>(
+        'SELECT name, city FROM hotel_properties WHERE workspace_id=$1 AND is_active=true ORDER BY lower(name)',
+        [workspaceId]
+      );
+      if (!rows.length) return fail(reply, 503, 'The hotel has not configured any properties for inquiries.', 'property_setup_required');
+      return reply.send({
+        captcha_required: true,
+        captcha_provider: 'cloudflare_turnstile',
+        site_key: env.turnstileSiteKey,
+        properties: rows
+      });
+    } catch {
+      return fail(reply, 503, 'The hotel inquiry form is not ready. Please contact the hotel directly.', 'property_setup_required');
+    }
   });
 
   app.post('/api/public/inquiry', async (request, reply) => {
@@ -69,7 +85,8 @@ export async function registerPublicInquiryRoutes(app: FastifyInstance): Promise
       });
       noStore(reply);
       return reply.code(201).send({ received: true, reference: String(lead.id).slice(0, 8) });
-    } catch {
+    } catch (error) {
+      if (error instanceof HotelPropertyUnavailableError) return fail(reply, 422, error.message, 'hotel_property_unavailable');
       return fail(reply, 500, 'The inquiry could not be received. Please contact the hotel directly.', 'inquiry_submission_failed');
     }
   });

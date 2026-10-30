@@ -37,7 +37,22 @@ export async function auditEvent(
   );
 }
 
+export class HotelPropertyUnavailableError extends Error {
+  readonly code = 'hotel_property_unavailable';
+  constructor() {
+    super('The selected hotel property is not active in this workspace.');
+    this.name = 'HotelPropertyUnavailableError';
+  }
+}
+
 async function insertLeadAndActivity(client: pg.PoolClient, input: LeadInsertInput, leadId = randomUUID()) {
+  const selectedProperty = await client.query(
+    `SELECT id FROM hotel_properties
+     WHERE workspace_id=$1 AND lower(trim(name))=lower(trim($2)) AND is_active=true
+     LIMIT 1 FOR SHARE`,
+    [input.workspaceId, input.lead.property_name]
+  );
+  if (!selectedProperty.rows[0]) throw new HotelPropertyUnavailableError();
   const leadResult = await client.query(
     `INSERT INTO leads (
       id, workspace_id, client_name, company_name, client_email, client_phone,

@@ -24,7 +24,7 @@ async function proxy(request: NextRequest, context: Context) {
   const target = new URL('/' + path.map(encodeURIComponent).join('/'), origin);
   target.search = request.nextUrl.search;
   const headers = new Headers();
-  for (const key of ['accept', 'authorization', 'content-type', 'idempotency-key', 'x-hub-signature-256']) {
+  for (const key of ['accept', 'authorization', 'content-type', 'idempotency-key', 'x-hub-signature-256', 'x-staypilot-workspace-id']) {
     const value = request.headers.get(key);
     if (value) headers.set(key, value);
   }
