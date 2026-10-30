@@ -26,7 +26,7 @@ The dashboard obtains a short-lived API token from `/api/auth/api-token`. The Ne
 
 ## Test account isolation
 
-Enable manual test credentials only in the intended test deployment. Set the same `TEST_LOGIN_ENABLED=true` and exact `TEST_LOGIN_EMAIL` in Vercel and Railway. Generate a bcrypt hash locally; do not share or commit the plaintext password. The API provisions this account into the dedicated `test` workspace created by migration `0006_test_workspace.sql`, which contains synthetic sample leads and no production customer records. Test access does not grant access to the default workspace.
+Enable manual test credentials only in Vercel Preview (or local development), never Production. Set `TEST_LOGIN_ENABLED=true` and the exact `TEST_LOGIN_EMAIL` for Preview in Vercel, and matching values in Railway. The application explicitly suppresses the Credentials provider when `VERCEL_ENV=production`. Generate a bcrypt hash locally; do not share or commit the plaintext password. The API provisions this account into the dedicated `test` workspace created by migration `0006_test_workspace.sql`, which contains synthetic sample leads and no production customer records. Test access does not grant access to the default workspace.
 
 ## Google OAuth callback
 
