@@ -2,7 +2,7 @@ import { auth, signIn } from '@/auth';
 import { redirect } from 'next/navigation';
 
 type Props = { searchParams: Promise<{ next?: string; error?: string }> };
-function safeNext(value?: string) { return value && value.startsWith('/') && !value.startsWith('//') && !value.includes('\\\\') ? value : '/'; }
+function safeNext(value?: string) { return value && value.startsWith('/') && !value.startsWith('//') && !value.includes('\\\\') ? value : '/dashboard'; }
 
 export default async function LoginPage({ searchParams }: Props) {
   const session = await auth();
