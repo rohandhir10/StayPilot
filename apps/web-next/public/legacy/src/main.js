@@ -3,7 +3,7 @@ import { waitForAuthReady, signOut } from './lib/auth.js';
 import { renderSalesWorkflow } from './sales-workflows.js';
 import { renderActionCentre } from './action-centre.js';
 
-const PREVIEW_MODE = true;
+const PREVIEW_MODE = new URLSearchParams(window.location.search).get("preview") === "1";
 const $=s=>document.querySelector(s);const $$=s=>[...document.querySelectorAll(s)];
 let leads=[],currentView="overview",searchTerm="",toastTimer,workspaceSession=null,actionCentreConversationOpener=null;
 const demoDate = days => new Date(Date.now() + days * 86400000).toISOString();
