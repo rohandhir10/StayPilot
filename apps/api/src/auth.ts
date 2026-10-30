@@ -1,8 +1,8 @@
+import { verifyApiToken } from './auth-token.js';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { env } from './config.js';
 import { pool, inTransaction } from './db.js';
 import { fail } from './http.js';
-import { FirebaseAuthNotConfiguredError, verifyFirebaseToken } from './firebase-auth.js';
 
 export type MemberRole = 'owner' | 'admin' | 'sales' | 'viewer';
 export type WorkspaceMember = {
@@ -14,8 +14,7 @@ export type WorkspaceMember = {
 };
 
 const allRoles: MemberRole[] = ['owner', 'admin', 'sales', 'viewer'];
-
-type VerifiedProfile = { email: string; name: string };
+type VerifiedProfile = { id: string; email: string; name: string };
 
 export async function getDefaultWorkspaceId(): Promise<string> {
   const { rows } = await pool.query<{ id: string }>("SELECT id FROM workspaces WHERE slug = 'default' LIMIT 1");
@@ -23,18 +22,19 @@ export async function getDefaultWorkspaceId(): Promise<string> {
   return rows[0].id;
 }
 
-async function bootstrapConfiguredOwner(userId: string, profile: VerifiedProfile): Promise<void> {
-  if (!env.ownerFirebaseUid || userId !== env.ownerFirebaseUid) return;
+async function bootstrapConfiguredOwner(profile: VerifiedProfile): Promise<void> {
+  if (!env.ownerEmail || profile.email !== env.ownerEmail) return;
   await pool.query(
     `INSERT INTO workspace_members (workspace_id, user_id, email, display_name, role, is_active)
      SELECT id, $1, $2, $3, 'owner', true FROM workspaces WHERE slug = 'default'
-     ON CONFLICT (workspace_id, user_id) DO UPDATE SET
-       email = EXCLUDED.email, display_name = EXCLUDED.display_name, role = 'owner', is_active = true, updated_at = now()`,
-    [userId, profile.email, profile.name]
+     ON CONFLICT (workspace_id, email) DO UPDATE SET
+       user_id = EXCLUDED.user_id, display_name = EXCLUDED.display_name, role = 'owner',
+       is_active = true, updated_at = now()`,
+    [profile.id, profile.email, profile.name]
   );
 }
 
-async function acceptMatchingInvite(userId: string, profile: VerifiedProfile): Promise<void> {
+async function acceptMatchingInvite(profile: VerifiedProfile): Promise<void> {
   const workspaceId = await getDefaultWorkspaceId();
   await inTransaction(async client => {
     const invitation = await client.query<{ id: string; role: MemberRole }>(
@@ -47,19 +47,21 @@ async function acceptMatchingInvite(userId: string, profile: VerifiedProfile): P
     const accepted = await client.query(
       `UPDATE workspace_invites SET accepted_at = now(), accepted_user_id = $1, updated_at = now()
        WHERE id = $2 AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > now() RETURNING id`,
-      [userId, row.id]
+      [profile.id, row.id]
     );
     if (!accepted.rows.length) return;
     await client.query(
       `INSERT INTO workspace_members (workspace_id, user_id, email, display_name, role, is_active)
        VALUES ($1, $2, $3, $4, $5, true)
-       ON CONFLICT (workspace_id, user_id) DO NOTHING`,
-      [workspaceId, userId, profile.email, profile.name, row.role]
+       ON CONFLICT (workspace_id, email) DO UPDATE SET
+         user_id = EXCLUDED.user_id, display_name = EXCLUDED.display_name,
+         role = EXCLUDED.role, is_active = true, updated_at = now()`,
+      [workspaceId, profile.id, profile.email, profile.name, row.role]
     );
     await client.query(
       `INSERT INTO sp_audit_events (workspace_id, actor_user_id, actor_email, action, entity_type, entity_id, metadata)
        VALUES ($1, $2, $3, 'team.invitation_accepted', 'workspace_invite', $4, '{}'::jsonb)`,
-      [workspaceId, userId, profile.email, row.id]
+      [workspaceId, profile.id, profile.email, row.id]
     );
   });
 }
@@ -70,68 +72,72 @@ export async function requireWorkspaceMember(
   allowedRoles: MemberRole[] = allRoles
 ): Promise<WorkspaceMember | null> {
   const authorization = request.headers.authorization || '';
-  const match = /^Bearer\s+(\S+)$/i.exec(authorization);
-  if (!match) {
+  const match = /^Bearer\\s+(\\S+)$/i.exec(authorization);
+  if (!match || !env.apiAuthSecret || !env.authTokenIssuer) {
     fail(reply, 401, 'Sign in to access this StayPilot workspace.', 'authentication_required');
     return null;
   }
 
-  let identity: Awaited<ReturnType<typeof verifyFirebaseToken>>;
-  try {
-    identity = await verifyFirebaseToken(match[1]!);
-  } catch (error) {
-    if (error instanceof FirebaseAuthNotConfiguredError) {
-      fail(reply, 503, 'Google sign-in is not configured on this StayPilot API.', 'firebase_auth_not_configured');
-      return null;
-    }
+  const identity = await verifyApiToken(match[1]!, env.apiAuthSecret, env.authTokenIssuer);
+  if (!identity || identity.provider !== 'google') {
     fail(reply, 401, 'Your Google sign-in could not be verified. Sign in again.', 'identity_verification_failed');
     return null;
   }
-  const userId = identity.uid;
-  if (!userId || userId.length > 128) {
-    fail(reply, 401, 'Your Google sign-in could not be verified. Sign in again.', 'identity_verification_failed');
-    return null;
-  }
+  const profile: VerifiedProfile = {
+    id: identity.id,
+    email: identity.email,
+    name: identity.name.trim().slice(0, 200) || identity.email
+  };
 
   let result = await pool.query<WorkspaceMember & { is_active: boolean }>(
     `SELECT workspace_id, user_id, email, display_name, role, is_active
-     FROM workspace_members WHERE user_id = $1 LIMIT 2`, [userId]
+     FROM workspace_members WHERE user_id = $1 OR email = $2
+     ORDER BY CASE WHEN user_id = $1 THEN 0 ELSE 1 END LIMIT 2`,
+    [profile.id, profile.email]
   );
 
   if (!result.rows.length) {
-    const verifiedEmail = identity.emailVerified && identity.email
-      ? identity.email.trim().toLowerCase()
-      : '';
-    if (!verifiedEmail || !verifiedEmail.includes('@')) {
-      fail(reply, 403, 'Use a Google account with a verified email address invited to this workspace.', 'verified_email_required');
-      return null;
-    }
-    const profile: VerifiedProfile = {
-      email: verifiedEmail,
-      name: (identity.name || verifiedEmail).trim().slice(0, 200)
-    };
-    await bootstrapConfiguredOwner(userId, profile);
+    await bootstrapConfiguredOwner(profile);
     result = await pool.query<WorkspaceMember & { is_active: boolean }>(
       `SELECT workspace_id, user_id, email, display_name, role, is_active
-       FROM workspace_members WHERE user_id = $1 LIMIT 2`, [userId]
+       FROM workspace_members WHERE user_id = $1 OR email = $2
+       ORDER BY CASE WHEN user_id = $1 THEN 0 ELSE 1 END LIMIT 2`,
+      [profile.id, profile.email]
     );
-    if (!result.rows.length && env.ownerFirebaseUid !== userId) {
-      try { await acceptMatchingInvite(userId, profile); } catch {
+    if (!result.rows.length && profile.email !== env.ownerEmail) {
+      try { await acceptMatchingInvite(profile); } catch {
         fail(reply, 403, 'Workspace invitation could not be accepted. Ask an owner to review access.', 'invitation_acceptance_failed');
         return null;
       }
       result = await pool.query<WorkspaceMember & { is_active: boolean }>(
         `SELECT workspace_id, user_id, email, display_name, role, is_active
-         FROM workspace_members WHERE user_id = $1 LIMIT 2`, [userId]
+         FROM workspace_members WHERE user_id = $1 OR email = $2
+         ORDER BY CASE WHEN user_id = $1 THEN 0 ELSE 1 END LIMIT 2`,
+        [profile.id, profile.email]
       );
     }
   }
 
-  const member = result.rows[0];
-  if (result.rows.length !== 1 || !member) {
+  if (result.rows.length !== 1 || !result.rows[0]) {
     fail(reply, 403, 'This account is not a member of the StayPilot workspace.', 'workspace_membership_required');
     return null;
   }
+
+  const member = result.rows[0];
+  if (member.user_id !== profile.id) {
+    const linked = await pool.query(
+      `UPDATE workspace_members SET user_id = $1, display_name = $2, updated_at = now()
+       WHERE workspace_id = $3 AND email = $4 AND user_id = $5`,
+      [profile.id, profile.name, member.workspace_id, profile.email, member.user_id]
+    );
+    if (linked.rowCount !== 1) {
+      fail(reply, 403, 'This account could not be securely linked to its workspace membership.', 'membership_link_failed');
+      return null;
+    }
+    member.user_id = profile.id;
+    member.display_name = profile.name;
+  }
+
   if (!member.is_active) {
     fail(reply, 403, 'Your StayPilot access has been disabled.', 'member_disabled');
     return null;
