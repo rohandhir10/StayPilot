@@ -232,9 +232,11 @@
 /* Hotel workspace selector */
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .workspace-picker{flex:1;min-width:0}
-#workspace-select{width:100%;max-width:100%;border:0;outline:0;background:transparent;color:#f1f4f8;font:600 11px/1.3 inherit;cursor:pointer;padding:2px 2px 2px 0}
+#workspace-select{width:100%;max-width:100%;border:0;outline:0;background:transparent;color:#f1f4f8;font-family:inherit;font-size:11px;font-weight:600;line-height:1.3;cursor:pointer;padding:2px 2px 2px 0}
 #workspace-select option{background:#17283f;color:#f1f4f8}
 #workspace-meta{display:block;color:#91a0b4;font-size:10px;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .workspace-create{width:28px;height:28px;flex:0 0 28px;border:1px solid #ffffff24;border-radius:8px;background:#ffffff08;color:#e4c99c;font-size:17px;line-height:1;cursor:pointer}
 .workspace-create:hover{background:#ffffff18;border-color:#d8b77e}
 .workspace-modal .form-grid{margin-top:4px}
+
+#workspace-select:focus-visible,.workspace-create:focus-visible{outline:2px solid #d8b77e;outline-offset:3px}
