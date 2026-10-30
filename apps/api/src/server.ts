@@ -42,7 +42,7 @@ await app.register(helmet, {
 await app.register(cors, {
   credentials: false,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Authorization', 'Content-Type', 'Idempotency-Key', 'X-Hub-Signature-256'],
+  allowedHeaders: ['Authorization', 'Content-Type', 'Idempotency-Key', 'X-Hub-Signature-256', 'X-StayPilot-Workspace-ID'],
   exposedHeaders: ['Retry-After', 'X-Request-Id'],
   origin(origin, callback) {
     if (!origin) return callback(null, true); // CLI/server-to-server; auth remains required on private routes.
