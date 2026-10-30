@@ -46,7 +46,7 @@ function renderWorkspaceOptions(workspaces, selectedId="") {
   for(const workspace of workspaces){
     const option=document.createElement("option");
     option.value=workspace.id;
-    option.textContent=workspace.name+" · "+workspace.role;
+    option.textContent=workspace.name+" · "+(workspace.access_status==="invited"?"Invitation":workspace.role);
     select.append(option);
   }
   select.value=workspaces.some(item=>item.id===selectedId)?selectedId:"";
