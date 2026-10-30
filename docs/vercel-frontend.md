@@ -1,70 +1,41 @@
-# Vercel frontend integration
+# Vercel Next.js application
 
-The backend does not replace or duplicate the frontend. Connect the existing frontend repository to Vercel and use the Railway service's HTTPS origin as its API origin. A Vercel project/repository named StayPilot was not visible in the connected account used during preparation, so this document is a setup contract rather than a claim that the frontend has been wired.
+Set the Vercel project **Root Directory** to `apps/web-next`. Framework preset: Next.js. Build command: `npm run build`; install command: `npm install --no-audit --no-fund`; output: Next.js default. Node.js 22 is required.
 
-## Vercel environment variables
+## Required Vercel environment variables
 
-| Variable | Environment | Notes |
-|---|---|---|
-| `VITE_API_BASE_URL` | Production/Preview/Development | Railway API origin only, e.g. `https://<your-api-service>.up.railway.app` (no trailing slash and no `/api` suffix) |
-| `VITE_CLERK_PUBLISHABLE_KEY` | Production/Preview/Development | Public Clerk publishable key (`pk_live_…` in production) |
+| Variable | Purpose |
+|---|---|
+| `AUTH_SECRET` | Auth.js session encryption secret; generate a unique random value with `openssl rand -base64 32` |
+| `AUTH_GOOGLE_ID` | Google OAuth client ID |
+| `AUTH_GOOGLE_SECRET` | Google OAuth client secret; server-only |
+| `API_AUTH_SECRET` | Independent 32+ character secret used to sign 5-minute API tokens; must match Railway exactly |
+| `AUTH_TOKEN_ISSUER` | Exact issuer string; must match Railway `AUTH_TOKEN_ISSUER` |
+| `API_BASE_URL` | Railway API origin only, e.g. `https://your-api.up.railway.app`, without path |
+| `TEST_LOGIN_ENABLED` | Set to `true` only on a controlled test deployment |
+| `TEST_LOGIN_EMAIL` | Exact test account email; must match the Railway value |
+| `TEST_LOGIN_PASSWORD_HASH` | bcrypt hash of the test password; never commit it or expose it to browser code |
 
-Never put `CLERK_SECRET_KEY`, `DATABASE_URL`, `META_APP_SECRET`, `META_WEBHOOK_VERIFY_TOKEN`, `TURNSTILE_SECRET_KEY`, or any partner API secret into Vercel frontend variables prefixed with `VITE_`, `NEXT_PUBLIC_`, or any other client-exposed namespace.
+Do not reuse `AUTH_SECRET` as `API_AUTH_SECRET`. Do not put database URLs, provider secrets, password hashes or API signing secrets in `NEXT_PUBLIC_*` variables.
 
-## Fetch contract
+## Authentication and API flow
 
-Private endpoints require a Clerk session bearer token. A plain `fetch('/api/leads/list')` call is not sufficient when the API lives on Railway. For React with Clerk, a single shared client helper can look like this:
+Auth.js creates an HTTP-only session cookie. Google accounts are accepted only when Google reports `email_verified=true`. The restricted Credentials provider is disabled unless `TEST_LOGIN_ENABLED=true` and checks one exact email against a bcrypt password hash.
 
-```ts
-const API_ORIGIN = (import.meta.env.VITE_API_BASE_URL as string).replace(/\/$/, '');
+The dashboard obtains a short-lived API token from `/api/auth/api-token`. The Next.js server signs this token; the browser never receives the signing secret. Dashboard API requests use the same-origin `/api/backend/*` proxy, which forwards only the bearer token and approved request headers to Railway. The API verifies signature, issuer, audience, expiry and verified-email claim before resolving membership and permissions.
 
-type TokenProvider = () => Promise<string | null>;
+## Test account isolation
 
-export async function stayPilotFetch<T>(
-  getToken: TokenProvider,
-  path: string,
-  init: RequestInit = {},
-): Promise<T> {
-  const token = await getToken();
-  if (!token) throw new Error('Sign in to StayPilot first.');
+Enable manual test credentials only in the intended test deployment. Set the same `TEST_LOGIN_ENABLED=true` and exact `TEST_LOGIN_EMAIL` in Vercel and Railway. Generate a bcrypt hash locally; do not share or commit the plaintext password. The API provisions this account into the dedicated `test` workspace created by migration `0006_test_workspace.sql`, which contains synthetic sample leads and no production customer records. Test access does not grant access to the default workspace.
 
-  const response = await fetch(`${API_ORIGIN}${path}`, {
-    ...init,
-    cache: 'no-store',
-    headers: {
-      Accept: 'application/json',
-      ...(init.body ? { 'Content-Type': 'application/json' } : {}),
-      Authorization: `Bearer ${token}`,
-      ...init.headers,
-    },
-  });
+## Google OAuth callback
 
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const message = typeof body.error === 'string' ? body.error : `Request failed (${response.status}).`;
-    const error = new Error(message) as Error & { status?: number; code?: string; body?: unknown };
-    error.status = response.status;
-    error.code = typeof body.code === 'string' ? body.code : undefined;
-    error.body = body;
-    throw error;
-  }
-  return body as T;
-}
-```
+Configure the Google OAuth consent screen and add the exact Auth.js redirect URI:
 
-Example in a React component:
+`https://YOUR-VERCEL-DOMAIN/api/auth/callback/google`
 
-```ts
-const { getToken } = useAuth();
-const data = await stayPilotFetch(() => getToken(), '/api/leads/list');
-```
+Also configure the production domain as an authorized JavaScript origin where required by Google. Add preview callback URLs only for explicitly trusted preview domains.
 
-Use the *same* helper for existing UI pages and actions. Don't copy authorization logic into each page. `GET /api/public/form-config` and `POST /api/public/inquiry` are public endpoints and can use ordinary `fetch`; the public form submission still requires a valid Turnstile token and privacy-consent flag.
+## Deployment safety
 
-## CORS configuration
-
-Set Railway `WEB_ORIGINS` to exact origins, e.g. `https://your-frontend.vercel.app,https://sales.example.com`. An origin consists of scheme + hostname + optional port, with no path or trailing slash. Do not use `*`. Vercel preview domains can vary by branch/commit; list the specific trusted preview origin you are testing, or use a stable preview domain you control. Do not use a broad regex that trusts arbitrary `*.vercel.app` sites.
-
-## Existing UI routes preserved
-
-The backend includes compatibility paths for the current UI's lead CRUD, `/api/session`, unified inbox, channel status, CSV import and `/api/integrations/api-keys`. But the existing frontend still needs to be updated to call the Railway API origin and attach the Clerk bearer token. The current Hatchable prototype frontend was not found in the connected GitHub account, so that edit has not been made in a Vercel repository.
+The new app is not ready for production cutover until the Next.js build, API typecheck/tests, migration, Google callback, test login, API proxy, membership and role checks have all passed. Keep the old Vite deployment available for rollback until then.
