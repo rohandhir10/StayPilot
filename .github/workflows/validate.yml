@@ -49,3 +49,29 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Build frontend
         run: npm run build
+
+  next-web:
+    name: Next.js production build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web-next
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Next.js dependencies
+        run: npm install --no-audit --no-fund
+      - name: Build Next.js application
+        env:
+          AUTH_SECRET: ci-only-secret-not-for-deployment
+          AUTH_GOOGLE_ID: ci-placeholder.apps.googleusercontent.com
+          AUTH_GOOGLE_SECRET: ci-placeholder
+          API_AUTH_SECRET: ci-only-api-secret-long-enough-for-build-validation
+          AUTH_TOKEN_ISSUER: https://staypilot.app
+          API_BASE_URL: https://api.example.test
+          TEST_LOGIN_ENABLED: "false"
+        run: npm run build
