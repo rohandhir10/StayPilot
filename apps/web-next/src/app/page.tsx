@@ -1,3 +1,7 @@
-import { auth } from '@/auth';
 import { redirect } from 'next/navigation';
-export default async function HomePage() { const session = await auth(); redirect(session?.user ? '/dashboard' : '/login'); }
+
+export default function HomePage() {
+  // The public entry point is a safe, read-only product preview.
+  // Authenticated workspace access remains available at /login.
+  redirect('/legacy/index.html');
+}
