@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 import { env } from '../config.js';
 import { pool, inTransaction } from '../db.js';
 import { requireWorkspaceMember } from '../auth.js';
