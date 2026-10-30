@@ -4,12 +4,13 @@
 
 ```text
 Browser
-  ├─ Vercel frontend (public JS; only publishable keys and API origin)
-  └─ HTTPS fetch with Clerk session bearer token
-       ↓ exact-origin CORS
-Railway Fastify API (private application secrets; validates identity and role)
+  └─ Vercel Next.js app (Auth.js session cookie; no provider secrets in browser JS)
+       ├─ Google OAuth / restricted test Credentials provider
+       ├─ short-lived signed API token (5-minute expiry)
+       └─ same-origin API proxy (forwards only bearer token + approved headers)
+            ↓ private server-to-server HTTPS
+Railway Fastify API (verifies JWT signature, issuer, audience, expiry and email verification; resolves workspace role)
   ├─ Railway PostgreSQL (private networking; TLS verification enabled)
-  ├─ Clerk Backend API (verified user email + identity lookup)
   ├─ Cloudflare Turnstile Siteverify (public inquiry form anti-abuse)
   └─ Meta webhook endpoint (HMAC verified against raw bytes)
 ```
@@ -22,7 +23,8 @@ GitHub is the only code source of truth. Railway and Vercel should be connected 
 - **API:** authenticated user identity, verified-email check when claiming an invite, workspace membership and role, schema validation, source attribution, duplicate hints, rate limits, business transactions, webhook verification, idempotency, audit/activity entries.
 - **Proxy trust:** forwarded client-IP headers are trusted only when the direct peer matches the explicit `TRUSTED_PROXY_CIDRS` allowlist. Production must use narrow, provider-confirmed ingress ranges; never use a universal CIDR.
 - **PostgreSQL:** foreign keys, unique constraints, status constraints, transactional persistence, persisted idempotency/rate-limit state.
-- **Clerk:** session creation, verification, recovery, session token validation, Backend API for account profile lookup.
+- **Auth.js:** Google OAuth, encrypted HTTP-only session cookies, CSRF protection and restricted test-only credentials. The Next.js server signs 5-minute HS256 API tokens using a separate shared secret.
+- **API token:** Fastify accepts only HS256 tokens with the configured issuer, `staypilot-api` audience, verified-email claim and valid time bounds. The API secret is never exposed to browser JavaScript.
 - **Provider accounts:** Meta/Turnstile credentials are configured by the owner in the secret store; integration eligibility and permissions must be approved at the provider.
 
 ## Data model overview
@@ -39,7 +41,7 @@ GitHub is the only code source of truth. Railway and Vercel should be connected 
 
 ## Authorization model
 
-The API resolves the logged-in Clerk user server-side. It then finds the active `workspace_members` row for that user. A signed-in account without an active membership is denied. The only exception is initial owner bootstrap when the authenticated Clerk user ID matches `OWNER_CLERK_USER_ID`. Other members are added only by an invitation that matches a verified email address and has not expired or been revoked. User IDs, role names, workspace IDs or owner claims supplied in request bodies are ignored.
+The API verifies the Auth.js-issued token and resolves the active `workspace_members` row by stable subject or verified email. A signed-in account without an active membership is denied. Initial owner bootstrap is restricted to the configured `OWNER_EMAIL`. Other members are added only by an invitation matching the verified email and an unexpired, unrevoked invite. Test credentials are accepted only when the API-side feature flag and exact test email match; that identity is provisioned only into the isolated `test` workspace. User IDs, role names, workspace IDs or owner claims supplied in request bodies are ignored.
 
 Current scope is one default StayPilot workspace, appropriate for one hotel sales operation. Multi-workspace tenant selection and cross-portfolio isolation are not yet implemented; do not market this starter as a multi-customer SaaS without extending the membership resolver and tests.
 
