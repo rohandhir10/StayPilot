@@ -14,7 +14,7 @@ export type WorkspaceMember = {
 };
 const allRoles: MemberRole[] = ['owner', 'admin', 'sales', 'viewer'];
 
-type AuthProfile = { id: string; email: string; name: string };
+type AuthProfile = { id: string; email: string; name: string; provider: string };
 async function verifyRequest(request: FastifyRequest): Promise<AuthProfile | null> {
   const header = request.headers.authorization;
   if (!header?.startsWith('Bearer ') || !env.apiAuthSecret) return null;
@@ -23,10 +23,10 @@ async function verifyRequest(request: FastifyRequest): Promise<AuthProfile | nul
       algorithms: ['HS256'], issuer: env.authTokenIssuer, audience: 'staypilot-api', clockTolerance: 5
     });
     if (typeof payload.sub !== 'string' || !payload.sub || typeof payload.email !== 'string' ||
-        payload.email_verified !== true || typeof payload.name !== 'string') return null;
+        payload.email_verified !== true || typeof payload.name !== 'string' || typeof payload.auth_provider !== 'string') return null;
     const email = payload.email.trim().toLowerCase();
     if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) || email.length > 254) return null;
-    return { id: payload.sub, email, name: payload.name.slice(0, 160) || email };
+    return { id: payload.sub, email, name: payload.name.slice(0, 160) || email, provider: payload.auth_provider };
   } catch {
     return null;
   }
@@ -89,6 +89,38 @@ export async function requireWorkspaceMember(
   if (!profile) {
     fail(reply, 401, 'Sign in to access this StayPilot workspace.', 'authentication_required');
     return null;
+  }
+
+  if (profile.provider === 'test-credentials') {
+    if (!env.testLoginEnabled || !env.testLoginEmail || profile.email !== env.testLoginEmail) {
+      fail(reply, 403, 'Manual test access is disabled for this account.', 'test_access_disabled');
+      return null;
+    }
+    await pool.query(
+      `INSERT INTO workspace_members (workspace_id, user_id, email, display_name, role, is_active)
+       SELECT id, $1, $2, $3, 'admin', true FROM workspaces WHERE slug = 'test'
+       ON CONFLICT (workspace_id, email) DO UPDATE SET user_id = EXCLUDED.user_id,
+         display_name = EXCLUDED.display_name, role = 'admin', is_active = true, updated_at = now()`,
+      [profile.id, profile.email, profile.name]
+    );
+    const testResult = await pool.query<WorkspaceMember & { is_active: boolean }>(
+      `SELECT workspace_id, user_id, email, display_name, role, is_active
+       FROM workspace_members WHERE email = $1 AND workspace_id = (SELECT id FROM workspaces WHERE slug = 'test') LIMIT 2`,
+      [profile.email]
+    );
+    if (testResult.rows.length !== 1 || !testResult.rows[0]?.is_active) {
+      fail(reply, 403, 'The isolated test workspace is not available.', 'test_workspace_unavailable');
+      return null;
+    }
+    const testMember = testResult.rows[0];
+    if (!allowedRoles.includes(testMember.role)) {
+      fail(reply, 403, 'Your workspace role does not permit this action.', 'insufficient_role');
+      return null;
+    }
+    await pool.query('UPDATE workspace_members SET last_seen_at = now() WHERE workspace_id = $1 AND user_id = $2',
+      [testMember.workspace_id, testMember.user_id]);
+    return { workspace_id: testMember.workspace_id, user_id: testMember.user_id, email: testMember.email,
+      display_name: testMember.display_name, role: testMember.role };
   }
 
   let result = await pool.query<WorkspaceMember & { is_active: boolean }>(
