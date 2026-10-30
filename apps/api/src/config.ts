@@ -59,7 +59,7 @@ if (parsed.data.OAUTH_TOKEN_ENCRYPTION_KEY && Buffer.from(parsed.data.OAUTH_TOKE
 if (parsed.data.API_PUBLIC_ORIGIN) {
   try {
     const publicOrigin = new URL(parsed.data.API_PUBLIC_ORIGIN);
-    if (publicOrigin.origin !== parsed.data.API_PUBLIC_ORIGIN.replace(/\\/$/, '') || publicOrigin.pathname !== '/' || publicOrigin.search || publicOrigin.hash || (parsed.data.NODE_ENV === 'production' && publicOrigin.protocol !== 'https:')) {
+    if (publicOrigin.origin !== parsed.data.API_PUBLIC_ORIGIN.replace(/\/$/, '') || publicOrigin.pathname !== '/' || publicOrigin.search || publicOrigin.hash || (parsed.data.NODE_ENV === 'production' && publicOrigin.protocol !== 'https:')) {
       throw new Error();
     }
   } catch {
@@ -107,7 +107,7 @@ export const env = Object.freeze({
   webOrigins: parsed.data.WEB_ORIGINS.split(',').map(s => s.trim()).filter(Boolean),
   metaAppSecret: parsed.data.META_APP_SECRET,
   metaWebhookVerifyToken: parsed.data.META_WEBHOOK_VERIFY_TOKEN,
-  apiPublicOrigin: parsed.data.API_PUBLIC_ORIGIN?.replace(/\\/$/, ''),
+  apiPublicOrigin: parsed.data.API_PUBLIC_ORIGIN?.replace(/\/$/, ''),
   googleOAuthClientId: parsed.data.GOOGLE_OAUTH_CLIENT_ID,
   googleOAuthClientSecret: parsed.data.GOOGLE_OAUTH_CLIENT_SECRET,
   microsoftOAuthClientId: parsed.data.MICROSOFT_OAUTH_CLIENT_ID,
