@@ -77,6 +77,11 @@ export async function registerWorkspaceRoutes(app: FastifyInstance): Promise<voi
           [created.id, profile.id, profile.email, profile.name]
         );
         await client.query(
+          `INSERT INTO hotel_properties (workspace_id, name, city, created_by_user_id)
+           VALUES ($1, $2, '', $3)`,
+          [created.id, created.name, profile.id]
+        );
+        await client.query(
           `INSERT INTO sp_channel_connections (workspace_id, channel_key, provider, display_name, connection_mode)
            SELECT $1, v.channel_key, v.provider, v.display_name, v.connection_mode
            FROM (VALUES
