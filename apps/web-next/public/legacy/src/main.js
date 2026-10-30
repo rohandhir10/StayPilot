@@ -1,5 +1,5 @@
 import { apiRequest } from './lib/api.js';
-import { clerkConfigured, waitForAuthReady, signOut } from './lib/clerk.js';
+import { waitForAuthReady, signOut } from './lib/auth.js';
 import { renderSalesWorkflow } from './sales-workflows.js';
 import { renderActionCentre } from './action-centre.js';
 
