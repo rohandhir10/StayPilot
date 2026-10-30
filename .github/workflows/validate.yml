@@ -65,6 +65,16 @@ jobs:
           node-version: 22
       - name: Install Next.js dependencies
         run: npm install --no-audit --no-fund
+      - name: Check legacy dashboard JavaScript syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp --suffix=.mjs)"
+          trap 'rm -f "$tmp"' EXIT
+          while IFS= read -r -d '' file; do
+            cp "$file" "$tmp"
+            node --check "$tmp"
+          done < <(find public/legacy/src -type f -name '*.js' -print0)
       - name: Build Next.js application
         env:
           AUTH_SECRET: ci-only-secret-not-for-deployment
