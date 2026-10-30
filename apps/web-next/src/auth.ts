@@ -5,7 +5,7 @@ import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 
 const credentialsSchema = z.object({ email: z.string().email().max(254), password: z.string().min(1).max(256) });
-const testLoginEnabled = process.env.TEST_LOGIN_ENABLED === 'true';
+const testLoginEnabled = process.env.TEST_LOGIN_ENABLED === 'true' && process.env.VERCEL_ENV !== 'production';
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
