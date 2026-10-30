@@ -1,4 +1,5 @@
 import { verifyApiToken } from './auth-token.js';
+import { clerkClient, getAuth } from '@clerk/fastify';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { env } from './config.js';
 import { pool, inTransaction } from './db.js';
@@ -14,11 +15,31 @@ export type WorkspaceMember = {
 };
 const allRoles: MemberRole[] = ['owner', 'admin', 'sales', 'viewer'];
 
-type AuthProfile = { id: string; email: string; name: string; provider: 'google' | 'test-credentials' };
+type AuthProfile = { id: string; email: string; name: string; provider: 'google' | 'test-credentials' | 'clerk' };
 async function verifyRequest(request: FastifyRequest): Promise<AuthProfile | null> {
   const header = request.headers.authorization;
-  if (!header?.startsWith('Bearer ') || !env.apiAuthSecret) return null;
-  return verifyApiToken(header.slice(7), env.apiAuthSecret, env.authTokenIssuer);
+  if (header?.startsWith('Bearer ') && env.apiAuthSecret && env.authTokenIssuer) {
+    const authJsIdentity = await verifyApiToken(header.slice(7), env.apiAuthSecret, env.authTokenIssuer);
+    if (authJsIdentity) return authJsIdentity;
+  }
+
+  // Temporary compatibility: the existing production Vite client still uses Clerk
+  // until the Next.js app is configured, deployed and explicitly cut over.
+  const clerkAuth = getAuth(request);
+  if (!clerkAuth.isAuthenticated || !clerkAuth.userId) return null;
+  try {
+    const user = await clerkClient.users.getUser(clerkAuth.userId);
+    const primary = user.emailAddresses.find(item => item.id === user.primaryEmailAddressId);
+    const verified = primary?.verification?.status === 'verified'
+      ? primary
+      : user.emailAddresses.find(item => item.verification?.status === 'verified');
+    if (!verified?.emailAddress) return null;
+    const email = verified.emailAddress.trim().toLowerCase();
+    const name = [user.firstName, user.lastName].filter(Boolean).join(' ').trim() || email;
+    return { id: clerkAuth.userId, email, name, provider: 'clerk' };
+  } catch {
+    return null;
+  }
 }
 
 export async function getDefaultWorkspaceId(): Promise<string> {
@@ -28,7 +49,10 @@ export async function getDefaultWorkspaceId(): Promise<string> {
 }
 
 async function bootstrapConfiguredOwner(profile: AuthProfile): Promise<void> {
-  if (!env.ownerEmail || profile.email !== env.ownerEmail) return;
+  const isConfiguredOwner = profile.provider === 'clerk'
+    ? Boolean(env.ownerClerkUserId && profile.id === env.ownerClerkUserId)
+    : Boolean(env.ownerEmail && profile.email === env.ownerEmail);
+  if (!isConfiguredOwner) return;
   await pool.query(
     `INSERT INTO workspace_members (workspace_id, user_id, email, display_name, role, is_active)
      SELECT id, $1, $2, $3, 'owner', true FROM workspaces WHERE slug = 'default'
@@ -124,7 +148,7 @@ export async function requireWorkspaceMember(
        FROM workspace_members WHERE user_id = $1 OR email = $2
        ORDER BY CASE WHEN user_id = $1 THEN 0 ELSE 1 END LIMIT 2`, [profile.id, profile.email]
     );
-    if (!result.rows.length && profile.email !== env.ownerEmail) {
+    if (!result.rows.length && !(profile.provider === 'clerk' ? profile.id === env.ownerClerkUserId : profile.email === env.ownerEmail)) {
       try { await acceptMatchingInvite(profile); } catch {
         fail(reply, 403, 'Workspace invitation could not be accepted. Ask an owner to review access.', 'invitation_acceptance_failed');
         return null;
