@@ -8,7 +8,7 @@ const credentialsSchema = z.object({ email: z.string().email().max(254), passwor
 const testLoginEnabled = process.env.TEST_LOGIN_ENABLED === 'true';
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  trustHost: process.env.NODE_ENV !== 'production',
+  trustHost: true,
   session: { strategy: 'jwt', maxAge: 60 * 60 * 8, updateAge: 60 * 15 },
   pages: { signIn: '/login' },
   providers: [
@@ -52,6 +52,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.id = String(token.sub ?? '');
         session.user.email = String(token.email ?? '');
         session.user.name = String(token.name ?? '');
+        session.user.authProvider = String(token.provider ?? 'unknown');
       }
       return session;
     },
