@@ -19,7 +19,6 @@
     "cleanup:prod": "node dist/cleanup.js"
   },
   "dependencies": {
-    "@clerk/fastify": "^3.1.95",
     "@fastify/cors": "^11.3.1",
     "@fastify/helmet": "^13.2.0",
     "@fastify/rate-limit": "^11.2.1",
@@ -27,7 +26,8 @@
     "fastify-raw-body": "^6.0.1",
     "pg": "^8.16.3",
     "zod": "^4.6.7",
-    "dotenv": "^17.2.2"
+    "dotenv": "^17.2.2",
+    "jose": "^6.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.19.0",
