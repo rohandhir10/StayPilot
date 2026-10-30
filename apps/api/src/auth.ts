@@ -4,6 +4,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { env } from './config.js';
 import { pool, inTransaction } from './db.js';
 import { fail } from './http.js';
+import { resolveWorkspaceMembership } from './workspace-selection.js';
 
 export type MemberRole = 'owner' | 'admin' | 'sales' | 'viewer';
 export type WorkspaceMember = {
@@ -190,24 +191,24 @@ export async function requireWorkspaceMember(
     }
   }
 
-  if (!selectedWorkspaceId && result.rows.length > 1) {
+  const resolution = resolveWorkspaceMembership(result.rows, selectedWorkspaceId || undefined);
+  if (resolution.kind === 'selection_required') {
     fail(reply, 409, 'Choose a hotel workspace before continuing.', 'workspace_selection_required');
     return null;
   }
-  if (result.rows.length !== 1) {
-    fail(reply, 403, 'This account is not a member of the selected StayPilot workspace.', 'workspace_membership_required');
-    return null;
-  }
-
-  const member = result.rows[0];
-  if (!member) {
-    fail(reply, 403, 'This account is not a member of the selected StayPilot workspace.', 'workspace_membership_required');
-    return null;
-  }
-  if (!member.is_active) {
+  if (resolution.kind === 'disabled') {
     fail(reply, 403, 'Your StayPilot access has been disabled in this workspace.', 'member_disabled');
     return null;
   }
+  if (resolution.kind === 'ambiguous') {
+    fail(reply, 409, 'Workspace membership is ambiguous. Ask an owner to review your access.', 'workspace_membership_ambiguous');
+    return null;
+  }
+  if (resolution.kind !== 'selected') {
+    fail(reply, 403, 'This account is not a member of the selected StayPilot workspace.', 'workspace_membership_required');
+    return null;
+  }
+  const member = resolution.member;
   if (!allRoles.includes(member.role) || !allowedRoles.includes(member.role)) {
     fail(reply, 403, 'Your workspace role does not permit this action.', 'insufficient_role');
     return null;
