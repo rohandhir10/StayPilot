@@ -16,12 +16,28 @@ export async function registerWorkspaceRoutes(app: FastifyInstance): Promise<voi
     try {
       const testOnly = profile.provider === 'test-credentials';
       const { rows } = await pool.query(
-        `SELECT w.id, w.name, w.slug, wm.role, wm.created_at AS joined_at
-         FROM workspace_members wm
-         JOIN workspaces w ON w.id=wm.workspace_id
-         WHERE (wm.user_id=$1 OR wm.email=$2) AND wm.is_active=true
-           AND ($3::boolean=false OR w.slug='test')
-         ORDER BY w.name ASC, w.created_at ASC
+        `SELECT id, name, slug, role, joined_at, access_status
+         FROM (
+           SELECT w.id, w.name, w.slug, wm.role, wm.created_at AS joined_at,
+                  'active'::text AS access_status
+           FROM workspace_members wm
+           JOIN workspaces w ON w.id=wm.workspace_id
+           WHERE (wm.user_id=$1 OR wm.email=$2) AND wm.is_active=true
+             AND ($3::boolean=false OR w.slug='test')
+           UNION ALL
+           SELECT w.id, w.name, w.slug, wi.role, wi.created_at AS joined_at,
+                  'invited'::text AS access_status
+           FROM workspace_invites wi
+           JOIN workspaces w ON w.id=wi.workspace_id
+           WHERE wi.email=$2 AND wi.accepted_at IS NULL AND wi.revoked_at IS NULL AND wi.expires_at > now()
+             AND $3::boolean=false
+             AND NOT EXISTS (
+               SELECT 1 FROM workspace_members existing
+               WHERE existing.workspace_id=wi.workspace_id
+                 AND (existing.user_id=$1 OR existing.email=$2)
+             )
+         ) AS available_workspaces
+         ORDER BY name ASC, joined_at ASC
          LIMIT 100`,
         [profile.id, profile.email, testOnly]
       );
