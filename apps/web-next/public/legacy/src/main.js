@@ -1,9 +1,9 @@
-import { apiRequest } from './lib/api.js';
+import { apiRequest, getActiveWorkspaceId, setActiveWorkspaceId } from './lib/api.js';
 import { waitForAuthReady, signOut } from './lib/auth.js';
 import { renderSalesWorkflow } from './sales-workflows.js';
 import { renderActionCentre } from './action-centre.js';
 
-const PREVIEW_MODE = true;
+const PREVIEW_MODE = new URLSearchParams(window.location.search).get("preview") === "1";
 const $=s=>document.querySelector(s);const $$=s=>[...document.querySelectorAll(s)];
 let leads=[],currentView="overview",searchTerm="",toastTimer,workspaceSession=null,actionCentreConversationOpener=null;
 const demoDate = days => new Date(Date.now() + days * 86400000).toISOString();
@@ -35,6 +35,38 @@ async function api(path,opts={}) {
   const token = await user.getIdToken();
   return apiRequest(path, { ...opts, token });
 }
+function renderWorkspaceOptions(workspaces, selectedId="") {
+  const select=$("#workspace-select");
+  if(!select) return;
+  select.replaceChildren();
+  const placeholder=document.createElement("option");
+  placeholder.value="";
+  placeholder.textContent=workspaces.length?"Choose hotel workspace":"No workspaces yet";
+  select.append(placeholder);
+  for(const workspace of workspaces){
+    const option=document.createElement("option");
+    option.value=workspace.id;
+    option.textContent=workspace.name+" · "+workspace.role;
+    select.append(option);
+  }
+  select.value=workspaces.some(item=>item.id===selectedId)?selectedId:"";
+  $("#workspace-meta").textContent=workspaces.length===1?"1 workspace available":workspaces.length+" workspaces available";
+}
+
+function showWorkspaceGate(message) {
+  $("#sync-label").textContent="Workspace selection needed";
+  $("#page-title").textContent="Choose your hotel workspace";
+  $("#page-subtitle").textContent=message;
+  ["#metrics",".priority-banner",".dashboard-grid",".leads-panel"].forEach(selector=>$(selector)?.classList.add("hidden"));
+  $("#add-btn").disabled=true;
+  $("#workspace-select")?.focus();
+}
+
+async function readWorkspaceDirectory() {
+  const data=await api("/workspaces");
+  return Array.isArray(data.workspaces)?data.workspaces:[];
+}
+
 async function loadLeads(){
   if (PREVIEW_MODE) {
     leads=detectDuplicates(demo.map(row=>({...row})));
@@ -48,6 +80,9 @@ async function loadLeads(){
     $("#page-subtitle").textContent="You're viewing sample hotel-sales data. Changes are disabled and nothing is saved.";
     $("#add-btn").disabled=true;
     $("#add-btn").title="Disabled in the read-only preview";
+    $("#workspace-select").innerHTML='<option value="">Public demo preview</option>';
+    $("#workspace-select").disabled=true;
+    $("#workspace-create-btn").hidden=true;
     if (!document.querySelector(".staypilot-preview-banner")) {
       const banner=document.createElement("div");
       banner.className="staypilot-preview-banner";
@@ -60,9 +95,16 @@ async function loadLeads(){
   }
   try {
     workspaceSession=await api("/session");
+    const workspaceId=workspaceSession.workspace?.id||"";
+    if(workspaceId) setActiveWorkspaceId(workspaceId);
+    const directory=await readWorkspaceDirectory();
+    renderWorkspaceOptions(directory,workspaceId);
+    $("#workspace-select").disabled=directory.length<=1;
+    $("#workspace-create-btn").hidden=false;
+
     const name=workspaceSession.user?.name||workspaceSession.user?.email||"Sales teammate";
     $(".profile b").textContent=name;
-    $(".profile small").textContent=(workspaceSession.workspace?.role||"team member")+" · StayPilot";
+    $(".profile small").textContent=(workspaceSession.workspace?.role||"team member")+" · "+(directory.find(w=>w.id===workspaceId)?.name||"StayPilot");
     $(".profile .avatar").textContent=initials(name);
     $(".avatar-small").textContent=initials(name);
     if(currentView==="overview")$("#page-title").textContent="Good morning, "+String(name).split(/\s+/)[0];
@@ -73,8 +115,39 @@ async function loadLeads(){
   } catch(e) {
     leads=[];workspaceSession=null;
     if(e.status===401){location.replace("/login?next="+encodeURIComponent(location.pathname+location.search));return;}
-    if(e.status===403){$("#sync-label").textContent="Workspace access required";$("#page-title").textContent="Access needs approval";$("#page-subtitle").textContent=e.message||"Ask the workspace owner to invite this email.";$("#metrics").classList.add("hidden");$(".priority-banner").classList.add("hidden");$(".dashboard-grid").classList.add("hidden");toast("Your account is not yet authorized for this workspace.",true);}
-    else{$("#sync-label").textContent="Connection issue";toast("Could not load the sales workspace. No sample records were substituted.",true);}
+    if(e.code==="workspace_selection_required" || e.code==="workspace_membership_required" || e.code==="member_disabled"){
+      try{
+        const directory=await readWorkspaceDirectory();
+        renderWorkspaceOptions(directory,getActiveWorkspaceId());
+        $("#workspace-create-btn").hidden=false;
+        if(directory.length===1 && directory[0].id!==getActiveWorkspaceId()){
+          setActiveWorkspaceId(directory[0].id);
+          await loadLeads();
+          return;
+        }
+        if(directory.length>0){
+          showWorkspaceGate("Your account has access to more than one hotel workspace. Select the workspace you want to work in; records remain separated.");
+        }else{
+          $("#workspace-meta").textContent="Create your first workspace";
+          showWorkspaceGate("Your account does not have a hotel workspace yet. Create one to start capturing inquiries and inviting your sales team.");
+        }
+        return;
+      }catch{
+        $("#sync-label").textContent="Workspace list unavailable";
+      }
+    }
+    if(e.status===403){
+      $("#sync-label").textContent="Workspace access required";
+      $("#page-title").textContent="Access needs approval";
+      $("#page-subtitle").textContent=e.message||"Ask the workspace owner to invite this email.";
+      $("#metrics").classList.add("hidden");
+      $(".priority-banner").classList.add("hidden");
+      $(".dashboard-grid").classList.add("hidden");
+      toast("Your account is not yet authorized for this workspace.",true);
+    }else{
+      $("#sync-label").textContent="Connection issue";
+      toast("Could not load the sales workspace. No sample records were substituted.",true);
+    }
   }
   leads=detectDuplicates(leads);
   render();
