@@ -395,4 +395,42 @@ if(signOutButton){
     try{await signOut();}finally{location.replace("/login");}
   });
 }
+const workspaceSelect=$("#workspace-select");
+workspaceSelect?.addEventListener("change",()=>{
+  if(!workspaceSelect.value) return;
+  setActiveWorkspaceId(workspaceSelect.value);
+  location.reload();
+});
+function closeWorkspaceModal(){ $("#workspace-modal-backdrop")?.classList.remove("open"); }
+$("#workspace-create-btn")?.addEventListener("click",()=>{
+  if(PREVIEW_MODE){toast("Workspace creation is disabled in the public preview.");return;}
+  $("#workspace-modal-backdrop")?.classList.add("open");
+  $("#workspace-form input[name=name]")?.focus();
+});
+$("#workspace-modal-close")?.addEventListener("click",closeWorkspaceModal);
+$("#workspace-cancel")?.addEventListener("click",closeWorkspaceModal);
+$("#workspace-modal-backdrop")?.addEventListener("click",event=>{
+  if(event.target?.id==="workspace-modal-backdrop") closeWorkspaceModal();
+});
+$("#workspace-form")?.addEventListener("submit",async event=>{
+  event.preventDefault();
+  if(PREVIEW_MODE){toast("Workspace creation is disabled in the public preview.",true);return;}
+  const form=event.currentTarget;
+  const name=String(new FormData(form).get("name")||"").trim();
+  const submit=$("#workspace-submit");
+  if(!name){toast("Enter a hotel or portfolio name.",true);return;}
+  submit.disabled=true;
+  try{
+    const result=await api("/workspaces",{method:"POST",body:JSON.stringify({name})});
+    const workspaceId=result.workspace?.id;
+    if(typeof workspaceId!=="string"||!workspaceId) throw new Error("The workspace was created but its identifier was not returned. Contact support before retrying.");
+    setActiveWorkspaceId(workspaceId);
+    closeWorkspaceModal();
+    location.reload();
+  }catch(error){
+    toast(error.message||"Could not create the workspace.",true);
+  }finally{
+    submit.disabled=false;
+  }
+});
 loadLeads();
